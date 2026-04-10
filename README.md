@@ -79,10 +79,12 @@ uv pip install -r requirements.txt
 ## Usage
 
 ### Run JARVIS
-**Make sure your virtual environment is active** (you should see `(.venv)` in your terminal prompt), then run:
+**Make sure your virtual environment is active** (you should see `(.venv)` in your terminal prompt).
+
+If `python main.py` fails with a `ModuleNotFoundError`, use the explicit path:
 
 ```bash
-python main.py
+./.venv/bin/python main.py
 ```
 2. **Interaction:**
    - **Voice:** Say **"Hey Jarvis"** to wake him up. After the notification sound, speak your command.
