@@ -1,0 +1,183 @@
+import os
+import torch
+import whisper
+import soundfile as sf
+import pyaudio
+import wave
+import numpy as np
+import re
+from qwen_tts import Qwen3TTSModel
+
+class TTSEngine:
+    def __init__(self, use_gpu=False):
+        # Wir schalten GPU für TTS standardmäßig aus, da deine 12GB VRAM 
+        # bereits fast komplett von Ollama (Gemma 4) belegt sind.
+        # Das 0.6B Modell ist auf der CPU immer noch sehr schnell.
+        print("Lade Qwen3-TTS (0.6B Base) auf CPU...")
+        self.device = "cpu"
+        
+        try:
+            self.model = Qwen3TTSModel.from_pretrained(
+                "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
+                device_map=self.device,
+                dtype=torch.bfloat16
+            )
+        except Exception as e:
+            print(f"Fehler beim Laden von Qwen3: {e}. Nutze Fallback...")
+            # Falls bfloat16 auf deiner CPU nicht geht, versuche float32
+            self.model = Qwen3TTSModel.from_pretrained(
+                "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
+                device_map=self.device,
+                dtype=torch.float32
+            )
+        
+        self.stt_model = whisper.load_model("base")
+        
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        self.ref_wav = os.path.join(script_dir, "voice.wav")
+        self.ref_txt_file = os.path.join(script_dir, "voice.txt")
+        self.ref_text = ""
+        
+        if os.path.exists(self.ref_wav):
+            if os.path.exists(self.ref_txt_file):
+                # Read manual text from file
+                print(f"Reading manual reference text from {self.ref_txt_file}...")
+                with open(self.ref_txt_file, "r") as f:
+                    self.ref_text = f.read().strip()
+            else:
+                # Automatic transcription via Whisper
+                print("Analyzing voice.wav automatically for perfect cloning...")
+                result = self.stt_model.transcribe(self.ref_wav)
+                self.ref_text = result["text"].strip()
+            
+            print(f"Reference text for Qwen3: '{self.ref_text}'")
+        
+        print("Qwen3-TTS ready.")
+
+    def speak(self, text: str, interrupt_event=None):
+        """Generates audio with Qwen3-TTS and plays it. Uses background generation for speed and is interruptible."""
+        if not text.strip():
+            return
+            
+        import re
+        import threading
+        import queue
+        
+        # 1. Extract tag and clean text
+        tags = re.findall(r"\[([A-Za-zäöüß]+)\]", text)
+        
+        # Default mood: friendly and clear
+        instruction = "Speak with high emotional variance, very expressive, natural pauses, and a friendly tone."
+        
+        if tags:
+            tag = tags[0].lower()
+            tag_map = {
+                "aufgeregt": "Speak with extreme excitement, very high energy, fast and joyful!",
+                "freundlich": "Speak in a very friendly, professional, and pleasant voice.",
+                "traurig": "Speak with a very sad, shaky, and emotional voice, low energy.",
+                "wütend": "Speak with an angry, loud, and aggressive tone, very frustrated.",
+                "glücklich": "Speak with a wide smile in your voice, very cheerful and bright.",
+                "nachdenklich": "Speak slowly, thoughtfully, with realistic 'hmm' pauses and soft tone."
+            }
+            instruction = tag_map.get(tag, instruction)
+
+        display_text = re.sub(r"\[[A-Za-zäöüß]+\]", "", text).strip()
+        print(f"\n[Jarvis spricht]: {display_text}")
+        clean_text = display_text.replace("###", "").replace("***", "").replace("`", "").replace("*", "").replace("_", "")
+        
+        # 2. Splitting-Logik
+        MAX_CHARS = 400
+        chunks = []
+        if len(clean_text) <= MAX_CHARS:
+            chunks = [clean_text]
+        else:
+            mid = len(clean_text) // 2
+            best_split = -1
+            for i in range(MAX_CHARS // 2):
+                for pos in [mid + i, mid - i]:
+                    if pos < len(clean_text) and clean_text[pos] in ".!?":
+                        best_split = pos + 1
+                        break
+                if best_split != -1: break
+            
+            if best_split != -1:
+                chunks = [clean_text[:best_split].strip(), clean_text[best_split:].strip()]
+            else:
+                space_split = clean_text.rfind(" ", 0, MAX_CHARS)
+                if space_split != -1:
+                    chunks = [clean_text[:space_split].strip(), clean_text[space_split:].strip()]
+                else:
+                    chunks = [clean_text]
+
+        # 3. Parallelisierung: Generierung im Hintergrund, Abspielen im Vordergrund
+        audio_queue = queue.Queue()
+        
+        def generator_worker():
+            for i, chunk in enumerate(chunks):
+                if interrupt_event and interrupt_event.is_set():
+                    break
+                if not chunk: continue
+                output_file = f"temp_chunk_{i}_{threading.get_ident()}.wav"
+                try:
+                    if os.path.exists(self.ref_wav):
+                        wavs, sr = self.model.generate_voice_clone(
+                            text=chunk, language="German", ref_audio=self.ref_wav,
+                            ref_text=self.ref_text, instruction=instruction,
+                            temperature=0.8, top_p=0.9, repetition_penalty=1.1
+                        )
+                    else:
+                        wavs, sr = self.model.generate(text=chunk, language="German", instruction=instruction, temperature=0.8)
+                    
+                    sf.write(output_file, wavs[0], sr)
+                    audio_queue.put(output_file)
+                except Exception as e:
+                    print(f"Fehler bei Generierung: {e}")
+                    audio_queue.put(None)
+            audio_queue.put("DONE")
+
+        # Worker starten
+        gen_thread = threading.Thread(target=generator_worker)
+        gen_thread.start()
+
+        try:
+            p = pyaudio.PyAudio()
+            while True:
+                if interrupt_event and interrupt_event.is_set():
+                    break
+                    
+                try:
+                    file_path = audio_queue.get(timeout=0.1)
+                except queue.Empty:
+                    continue
+                    
+                if file_path == "DONE" or file_path is None:
+                    break
+                
+                # Abspielen
+                wf = wave.open(file_path, 'rb')
+                stream = p.open(format=p.get_format_from_width(wf.getsampwidth()),
+                                channels=wf.getnchannels(), rate=wf.getframerate(), output=True)
+                
+                data = wf.readframes(1024)
+                while len(data) > 0:
+                    if interrupt_event and interrupt_event.is_set():
+                        break
+                    stream.write(data)
+                    data = wf.readframes(1024)
+                
+                stream.stop_stream()
+                stream.close()
+                wf.close()
+                # Datei löschen nachdem sie abgespielt wurde
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+            p.terminate()
+        except Exception as e:
+            print(f"Fehler bei Audiowiedergabe: {e}")
+        
+        gen_thread.join()
+
+if __name__ == "__main__":
+    # Test
+    engine = TTSEngine()
+    engine.speak("[glücklich] Hallo, ich bin Jarvis. Dein lokaler Assistent. Wie kann ich dir heute helfen?")

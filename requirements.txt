@@ -1,0 +1,13 @@
+openwakeword
+pyaudio
+numpy>=1.26.0
+torch
+torchaudio
+openai-whisper
+ollama
+ddgs
+qwen-tts
+librosa
+PyQt5
+pexpect
+soundfile
