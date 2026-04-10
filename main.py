@@ -27,14 +27,21 @@ class JarvisAssistant:
         self.text_mode = False
         self.processing_lock = threading.Lock()
         self.interrupted_by_wakeword = False
+        self.ollama_model = None
 
         # Konfiguration laden
         self.load_config()
 
+        # Falls kein Modell in der Config ist -> Erststart-Modus
+        if not self.ollama_model:
+            print("[System]: Erster Start erkannt. Bitte wähle ein Modell in den Einstellungen.")
+            self.open_settings()
+
         print(f"Lade Whisper STT Modell ({WHISPER_MODEL})...")
         self.stt_model = whisper.load_model(WHISPER_MODEL)
 
-        self.check_ollama_model(self.ollama_model)
+        if self.ollama_model:
+            self.check_ollama_model(self.ollama_model)
 
     def load_config(self):
         """Lädt die Einstellungen aus der config.json."""
@@ -42,12 +49,28 @@ class JarvisAssistant:
             try:
                 with open(CONFIG_FILE, "r") as f:
                     config = json.load(f)
-                    self.ollama_model = config.get("ollama_model", DEFAULT_MODEL)
-                    print(f"[System]: Konfiguration geladen. Modell: {self.ollama_model}")
-                    return
+                    self.ollama_model = config.get("ollama_model")
+                    if self.ollama_model:
+                        print(f"[System]: Konfiguration geladen. Modell: {self.ollama_model}")
+                        return
             except Exception as e:
                 print(f"Fehler beim Laden der Config: {e}")
-        self.ollama_model = DEFAULT_MODEL
+        self.ollama_model = None
+
+    def open_settings(self):
+        """Öffnet die GUI-Einstellungen zur Modellauswahl."""
+        print("[System]: Öffne Einstellungen...")
+        res = parse_and_execute_tool(json.dumps({"tool": "manage_jarvis_gui", "kwargs": {"current_model": self.ollama_model or "Wähle ein Modell..."}}))
+        if res.startswith('{"type": "config_update"'):
+            new_data = json.loads(res).get("data", {})
+            if "model" in new_data:
+                self.ollama_model = new_data["model"]
+                self.save_config()
+                print(f"[System]: Modell auf '{self.ollama_model}' gesetzt.")
+        
+        if not self.ollama_model:
+            print("[Fehler]: Kein Modell ausgewählt. Jarvis kann nicht starten.")
+            os._exit(1)
 
     def save_config(self):
         """Speichert die aktuellen Einstellungen in die config.json."""
@@ -69,29 +92,10 @@ class JarvisAssistant:
         except Exception:
             pass
 
-        # 2. Falls nicht gefunden: 'Fuzzy' Normalisierung
-        normalized = model_name.lower().replace(" ", "").replace("gamma", "gemma")
-        if "gemma4" in normalized:
-            if "e2b" in normalized: normalized = "gemma4:e2b"
-            elif "e4b" in normalized: normalized = "gemma4:e4b"
-            else: normalized = "gemma4:latest"
-        elif "gemma2" in normalized: normalized = "gemma2"
-        elif "llama3" in normalized: normalized = "llama3"
-        elif "qwen3.5" in normalized: normalized = "qwen3.5"
-        
-        print(f"Prüfe normalisiertes Modell '{normalized}'...")
-        try:
-            ollama.show(normalized)
-            self.ollama_model = normalized
-            print(f"Ollama Modell '{normalized}' ist bereit.")
-        except Exception:
-            print(f"Ollama Modell '{normalized}' nicht gefunden. Versuche es zu laden...")
-            try:
-                ollama.pull(normalized)
-                self.ollama_model = normalized
-            except Exception as e:
-                print(f"Fehler beim Laden des Modells: {e}")
-                self.tts.speak(f"[nachdenklich] Entschuldige, aber ich konnte das Modell {model_name} nicht finden.")
+        # 2. Falls nicht gefunden -> GUI öffnen
+        print(f"[System]: Modell '{model_name}' wurde nicht gefunden.")
+        self.tts.speak(f"[nachdenklich] Ich konnte das Modell {model_name} nicht finden. Bitte wähle ein installiertes Modell aus.")
+        self.open_settings()
 
     def transcribe_audio(self, wav_path):
         print("Transkribiere Audio...")
