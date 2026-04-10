@@ -12,6 +12,17 @@ A local, intelligent, and professional AI voice assistant for Linux, powered by 
 - **Tool Execution:** JARVIS can execute shell commands, search the web, and manage settings through its integrated agent system.
 - **Emotion Support:** Supports emotional tags like `[glücklich]`, `[aufgeregt]`, `[nachdenklich]`, and `[freundlich]` for more expressive speech.
 
+## System Requirements
+
+| Component | Minimum (CPU-only) | Recommended (GPU) |
+|-----------|--------------------|-------------------|
+| **RAM** | 8 GB | 16 GB+ |
+| **GPU** | Not required (Intel/AMD iGPU ok) | NVIDIA GPU (8GB+ VRAM) |
+| **Storage** | ~10 GB free space | ~15 GB (for models) |
+| **OS** | Linux (Ubuntu, Arch, etc.) | Linux with CUDA support |
+
+> **Note:** Running on CPU/iGPU is fully supported but will result in higher latency (slower response times). An NVIDIA GPU is recommended for a "real-time" experience.
+
 ## Requirements & Installation
 
 ### 1. System Dependencies
