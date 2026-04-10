@@ -86,5 +86,9 @@ JARVIS supports zero-shot voice cloning via Qwen3-TTS.
 - [ ] Add more tool integrations.
 - [ ] Optimize VRAM usage for simultaneous STT/LLM/TTS.
 
+---
+
+**Made with the help of AI.**
+
 ## License
 MIT License. See [LICENSE](LICENSE) for details.
