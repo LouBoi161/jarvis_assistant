@@ -12,52 +12,74 @@ A local, intelligent, and professional AI voice assistant for Linux, powered by 
 - **Tool Execution:** JARVIS can execute shell commands, search the web, and manage settings through its integrated agent system.
 - **Emotion Support:** Supports emotional tags like `[glücklich]`, `[aufgeregt]`, `[nachdenklich]`, and `[freundlich]` for more expressive speech.
 
-## Requirements
-- **OS:** Linux
-- **Python:** 3.10+
-- **Ollama:** Installed and running (`ollama serve`)
-- **PortAudio:** Required for `pyaudio` (install via your package manager, e.g., `sudo pacman -S portaudio` or `sudo apt install libportaudio2`)
-- **GPU (Optional):** Recommended for faster STT/TTS (though TTS runs on CPU by default).
+## Requirements & Installation
 
-## Installation
+### 1. System Dependencies
+JARVIS requires some system-level libraries for audio processing and speech recognition.
 
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/your-username/jarvis_assistant.git
-   cd jarvis_assistant
-   ```
+**Arch Linux:**
+```bash
+sudo pacman -S portaudio ffmpeg
+```
 
-2. **Create a virtual environment:**
-   ```bash
-   python -m venv venv
-   source venv/bin/activate
-   ```
+**Ubuntu/Debian:**
+```bash
+sudo apt update
+sudo apt install portaudio19-dev ffmpeg
+```
 
-3. **Install dependencies:**
-   ```bash
-   pip install -r requirements.txt
-   ```
+**Fedora:**
+```bash
+sudo dnf install portaudio-devel ffmpeg
+```
 
-4. **Pull the Ollama model:**
-   Make sure Ollama is running, then pull the default model:
-   ```bash
-   ollama pull gemma4:e4b
-   ```
+### 2. Install Ollama
+Ollama is used for the LLM reasoning (Gemma 4). If you don't have it yet, install it with:
+```bash
+curl -fsSL https://ollama.com/install.sh | sh
+```
+Make sure the service is running (`ollama serve`) and pull the default model:
+```bash
+ollama pull gemma4:e4b
+```
+
+### 3. Python Setup
+We recommend using a virtual environment to keep your system clean.
+
+```bash
+# Clone the repository
+git clone https://github.com/LouBoi161/jarvis_assistant.git
+cd jarvis_assistant
+
+# Create and activate virtual environment
+python -m venv venv
+source venv/bin/activate
+
+# Install Python requirements (this includes Whisper and Qwen-TTS)
+pip install -r requirements.txt
+```
 
 ## Usage
 
-1. **Voice Setup:**
-   You can provide a `voice.wav` in the root directory for voice cloning. If no `voice.wav` is found, the assistant will use its default voice.
-
-2. **Run JARVIS:**
+1. **Start JARVIS:**
    ```bash
    python main.py
    ```
+2. **Interaction:**
+   - **Voice:** Say **"Hey Jarvis"** to wake him up. After the notification sound, speak your command.
+   - **Text:** You can also type directly into the terminal while JARVIS is running.
+3. **Commands:**
+   - `/settings` - Open the GUI to switch Ollama models.
+   - `/model <name>` - Quick-switch to another model (e.g., `/model llama3`).
+   - `/clear` - Clear the current chat history.
+   - `/exit` - Close the assistant.
 
-3. **Interaction:**
-   - Say **"Hey Jarvis"** to wake up the assistant.
-   - Or type directly into the terminal.
-   - Use commands like `/settings`, `/model <name>`, or `/clear` in the terminal.
+## Custom Voice Cloning
+JARVIS supports zero-shot voice cloning via Qwen3-TTS.
+1. Place a short audio file (5-10 seconds) of the target voice in the root directory.
+2. Rename it to `voice.wav`.
+3. (Optional) Create a `voice.txt` containing the exact transcript of what is said in `voice.wav` for better quality.
+4. Restart JARVIS. He will now speak with that voice.
 
 ## Roadmap
 - [ ] Improve voice cloning reliability.
