@@ -85,7 +85,6 @@ JARVIS supports zero-shot voice cloning via Qwen3-TTS.
 4. Restart JARVIS. He will now speak with that voice.
 
 ## Roadmap
-- [ ] Improve voice cloning reliability.
 - [ ] Add more tool integrations.
 - [ ] Optimize VRAM usage for simultaneous STT/LLM/TTS.
 
