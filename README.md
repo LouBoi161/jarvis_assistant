@@ -44,19 +44,22 @@ ollama pull gemma4:e4b
 ```
 
 ### 3. Python Setup
-We recommend using a virtual environment to keep your system clean.
+We recommend using a virtual environment and **uv** for lightning-fast dependency installation.
 
 ```bash
 # Clone the repository
 git clone https://github.com/LouBoi161/jarvis_assistant.git
 cd jarvis_assistant
 
-# Create and activate virtual environment
-python -m venv venv
-source venv/bin/activate
+# Install uv (if you don't have it yet)
+curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Install Python requirements (this includes Whisper and Qwen-TTS)
-pip install -r requirements.txt
+# Create and activate virtual environment
+uv venv
+source .venv/bin/activate
+
+# Install Python requirements using uv
+uv pip install -r requirements.txt
 ```
 
 ## Usage
