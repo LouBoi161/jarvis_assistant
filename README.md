@@ -58,27 +58,32 @@ ollama pull gemma4:e4b
 We recommend using a virtual environment and **uv** for lightning-fast dependency installation.
 
 ```bash
-# Clone the repository
+# 1. Clone the repository
 git clone https://github.com/LouBoi161/jarvis_assistant.git
 cd jarvis_assistant
 
-# Install uv (if you don't have it yet)
+# 2. Install uv (if you don't have it yet)
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Create and activate virtual environment
+# 3. Create a virtual environment
 uv venv
+
+# 4. ACTIVATE the virtual environment (IMPORTANT!)
+# You must do this every time you open a new terminal!
 source .venv/bin/activate
 
-# Install Python requirements using uv
+# 5. Install all requirements
 uv pip install -r requirements.txt
 ```
 
 ## Usage
 
-1. **Start JARVIS:**
-   ```bash
-   python main.py
-   ```
+### Run JARVIS
+**Make sure your virtual environment is active** (you should see `(.venv)` in your terminal prompt), then run:
+
+```bash
+python main.py
+```
 2. **Interaction:**
    - **Voice:** Say **"Hey Jarvis"** to wake him up. After the notification sound, speak your command.
    - **Text:** You can also type directly into the terminal while JARVIS is running.
