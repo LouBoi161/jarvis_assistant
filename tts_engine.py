@@ -93,8 +93,10 @@ class TTSEngine:
             }
             instruction = tag_map.get(tag, instruction)
 
-        display_text = re.sub(r"\[[A-Za-zäöüß]+\]", "", text)
-        display_text = re.sub(r"<EMOTION>.*?</EMOTION>", "", display_text, flags=re.IGNORECASE).strip()
+        display_text = re.sub(r"\[[A-Za-zäöüß ]+\]", "", text)
+        # Alle Tags in spitzen Klammern komplett entfernen (auch den Inhalt!)
+        display_text = re.sub(r"<[^>]+>.*?</[^>]+>", "", display_text, flags=re.DOTALL)
+        display_text = re.sub(r"<[^>]+>", "", display_text).strip()
         
         # --- TEXT NORMALISIERUNG FÜR TTS ---
         # 1. Uhrzeiten umwandeln (10:08 -> 10 Uhr 08), da Doppelpunkte oft Teile überspringen lassen

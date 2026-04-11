@@ -61,9 +61,13 @@ class JarvisAssistant:
         import re
         if self.view_mode == "standard":
             if level == "standard":
-                # Alle Arten von Emotion-Tags entfernen ([freundlich] oder <EMOTION>...</EMOTION>)
-                clean_message = re.sub(r"\[[A-Za-zäöüß]+\]", "", message)
-                clean_message = re.sub(r"<EMOTION>.*?</EMOTION>", "", clean_message, flags=re.IGNORECASE)
+                # 1. Entferne [Emotion]-Tags
+                clean_message = re.sub(r"\[[A-Za-zäöüß ]+\]", "", message)
+                # 2. Entferne <Tag>...</Tag> inklusive Inhalt
+                clean_message = re.sub(r"<[^>]+>.*?</[^>]+>", "", clean_message, flags=re.DOTALL)
+                # 3. Entferne verbleibende einzelne <Tags>
+                clean_message = re.sub(r"<[^>]+>", "", clean_message)
+                
                 clean_message = clean_message.strip()
                 if clean_message:
                     print(clean_message)
@@ -287,8 +291,11 @@ class JarvisAssistant:
                 
                 try:
                     data = json.loads(json_string)
-                    # Tool Execution loggen
-                    self.log(f"[Tool Execution] {data.get('tool')}: {data.get('kwargs')}", "standard")
+                    # Tool Execution EXTREM PROMINENT hervorheben
+                    tool_name = data.get('tool')
+                    tool_args = data.get('kwargs')
+                    self.log(f"\n>>>> [JARVIS AKTIV]: Nutze Werkzeug '{tool_name}'", "standard")
+                    self.log(f">>>> [DETAILS]: {tool_args}\n", "standard")
                     
                     tool_result = parse_and_execute_tool(json_string)
                     self.history.append({"role": "system", "content": f"Tool Ergebnis:\n{tool_result}"})
