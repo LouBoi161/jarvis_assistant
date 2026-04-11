@@ -37,6 +37,7 @@ class TTSEngine:
         self.ref_wav = os.path.join(script_dir, "voice.wav")
         self.ref_txt_file = os.path.join(script_dir, "voice.txt")
         self.ref_text = ""
+        self.voice_clone_prompt = None
         
         if os.path.exists(self.ref_wav):
             if os.path.exists(self.ref_txt_file):
@@ -51,6 +52,15 @@ class TTSEngine:
                 self.ref_text = result["text"].strip()
             
             print(f"Reference text for Qwen3: '{self.ref_text}'")
+            print("Pre-calculating voice clone prompt for maximum speed...")
+            try:
+                self.voice_clone_prompt = self.model.create_voice_clone_prompt(
+                    ref_audio=self.ref_wav,
+                    ref_text=self.ref_text
+                )
+                print("Voice clone prompt cached successfully.")
+            except Exception as e:
+                print(f"Warning: Could not pre-calculate voice clone prompt: {e}")
         
         print("Qwen3-TTS ready.")
 
@@ -119,7 +129,16 @@ class TTSEngine:
                 if not chunk: continue
                 output_file = f"temp_chunk_{i}_{threading.get_ident()}.wav"
                 try:
-                    if os.path.exists(self.ref_wav):
+                    if self.voice_clone_prompt is not None:
+                        # Use the pre-calculated prompt for speed
+                        wavs, sr = self.model.generate_voice_clone(
+                            text=chunk, language="German", 
+                            voice_clone_prompt=self.voice_clone_prompt, 
+                            instruction=instruction,
+                            temperature=0.8, top_p=0.9, repetition_penalty=1.1
+                        )
+                    elif os.path.exists(self.ref_wav):
+                        # Fallback if prompt wasn't cached but wav exists
                         wavs, sr = self.model.generate_voice_clone(
                             text=chunk, language="German", ref_audio=self.ref_wav,
                             ref_text=self.ref_text, instruction=instruction,
