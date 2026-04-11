@@ -94,7 +94,8 @@ class TTSEngine:
             instruction = tag_map.get(tag, instruction)
 
         display_text = re.sub(r"\[[A-Za-zäöüß]+\]", "", text).strip()
-        clean_text = display_text.replace("###", "").replace("***", "").replace("`", "").replace("*", "").replace("_", "")
+        # Zeilenumbrüche entfernen, da sie das Modell oft zum Absturz bringen
+        clean_text = display_text.replace("\n", " ").replace("###", "").replace("***", "").replace("`", "").replace("*", "").replace("_", "")
         
         # 2. Splitting-Logik
         MAX_CHARS = 400
@@ -177,13 +178,20 @@ class TTSEngine:
                 if interrupt_event and interrupt_event.is_set():
                     break
                     
+                # Safety check: if thread died without putting DONE, break to avoid hang
+                if not gen_thread.is_alive() and audio_queue.empty():
+                    break
+
                 try:
-                    file_path = audio_queue.get(timeout=0.1)
+                    file_path = audio_queue.get(timeout=0.2)
                 except queue.Empty:
                     continue
                     
-                if file_path == "DONE" or file_path is None:
+                if file_path == "DONE":
                     break
+                
+                if file_path is None:
+                    continue
                 
                 # Abspielen
                 wf = wave.open(file_path, 'rb')
