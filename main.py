@@ -261,13 +261,13 @@ class JarvisAssistant:
                 
             import re
             
-            # 1. Denken extrahieren (zwischen <thought> tags)
-            thought_match = re.search(r"<thought>(.*?)</thought>", response_text, re.DOTALL)
+            # 1. Denken extrahieren (unterstützt <thought> und <think> von Modellen wie DeepSeek)
+            thought_match = re.search(r"<(thought|think)>(.*?)</\1>", response_text, re.DOTALL)
             if thought_match:
-                thought_content = thought_match.group(1).strip()
+                thought_content = thought_match.group(2).strip()
                 self.log(f"[Thinking]: {thought_content}", "debug")
-                # Denken aus der Antwort für den User entfernen
-                response_text = re.sub(r"<thought>.*?</thought>", "", response_text, flags=re.DOTALL).strip()
+                # Alle Denken-Blöcke aus der Antwort für den User entfernen
+                response_text = re.sub(r"<(thought|think)>.*?</\1>", "", response_text, flags=re.DOTALL).strip()
 
             # 2. JSON extrahieren (Werkzeuge)
             json_match = re.search(r"(\{.*\})", response_text, re.DOTALL)
