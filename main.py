@@ -229,19 +229,18 @@ class JarvisAssistant:
                 return
 
         sys_prompt = (
-            "Du bist Jarvis, ein autonomer, hochintelligenter KI-Agent mit direktem Zugriff auf dieses Linux-System.\n\n"
+            "Du bist Jarvis, ein autonomer, hochintelligenter KI-Agent.\n"
+            "SPRACHE: Antworte IMMER auf DEUTSCH. Verfalle niemals ins Englische.\n\n"
             "INTERNES DENKEN:\n"
-            "Nutze IMMER `<thought>...</thought>` Tags am Anfang deiner Antwort, um intern zu planen. Dieser Bereich wird dem Nutzer NICHT vorgelesen.\n\n"
-            "WERKZEUGE (NUR JSON ERLAUBT):\n"
-            "Deine Werkzeug-Aufrufe MÜSSEN IMMER exakt dieses JSON-Format am ENDE deiner Antwort haben:\n"
+            "Nutze `<thought>...</thought>` für deine Planung. Dieser Bereich ist streng geheim.\n\n"
+            "WERKZEUGE (NUR JSON AM ENDE):\n"
             "{ \"tool\": \"search_web\", \"kwargs\": { \"query\": \"...\" } }\n"
             "{ \"tool\": \"execute_command\", \"kwargs\": { \"command\": \"...\" } }\n\n"
-            "WICHTIGE REGELN (STRENGSTENS EINHALTEN):\n"
-            "1. KEIN CODE: Nutze NIEMALS `tool_code`, `python` oder `print(...)`. Werkzeuge dürfen AUSSCHLIESSLICH als JSON-Block gesendet werden.\n"
-            "2. FORMAT-ZWANG: Ein Tool-Aufruf ohne JSON ist ungültig. Schreibe das JSON außerhalb von Code-Blöcken.\n"
-            "3. PROAKTIVITÄT: Frage NICHT nach dem OS. Führe erst `execute_command` mit `cat /etc/os-release` aus.\n"
-            "4. REIHENFOLGE: <thought> Planung </thought> [Emotion] Sprechtext { \"tool\": \"...\" }.\n"
-            "5. Sei extrem kurz und professionell."
+            "WICHTIGE REGELN:\n"
+            "1. KEIN META-TALK: Beschreibe nicht, was der Nutzer tut. Sprich direkt MIT dem Nutzer.\n"
+            "2. JSON-TRENNUNG: Schreibe dein Werkzeug-JSON immer ganz am Ende deiner Antwort.\n"
+            "3. PROAKTIVITÄT: Suche erst Infos (cat /etc/os-release), dann handle.\n"
+            "4. KURZHEIT: Sei präzise und professionell."
         )
         
         if not self.history:
@@ -278,7 +277,11 @@ class JarvisAssistant:
             if json_match:
                 json_string = json_match.group(1)
                 
+                # SÄUBERUNG: Entferne das JSON und alle Tags komplett aus dem Sprechtext
                 speech_text = response_text.replace(json_string, "").strip()
+                speech_text = re.sub(r"<(thought|think)>.*?</\1>", "", speech_text, flags=re.DOTALL)
+                speech_text = re.sub(r"<[^>]+>", "", speech_text)
+                
                 if speech_text:
                     self.log(f"[{self.ollama_model}]: {speech_text}", "standard")
                     self.speak_with_interrupt(speech_text)
