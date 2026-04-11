@@ -42,10 +42,14 @@ def play_notification(filename="notification.wav"):
                         rate=wf.getframerate(),
                         output=True,
                         frames_per_buffer=4096)
-        data = wf.readframes(4096)
+        # Wir lesen in kleineren Häppchen, schicken aber an den großen Puffer
+        data = wf.readframes(1024)
         while len(data) > 0:
             stream.write(data)
-            data = wf.readframes(4096)
+            data = wf.readframes(1024)
+        
+        # Kurze Pause damit der Puffer sicher leer ist
+        time.sleep(0.05)
         stream.stop_stream()
         stream.close()
         p.terminate()
