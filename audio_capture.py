@@ -60,7 +60,6 @@ def listen_for_wakeword(interrupt_check=None):
     except Exception:
         oww_model = Model()
 
-    print("Listening for Wake Word... (Press Ctrl+Shift+Alt+A to switch to Text Mode)")
     mic_stream = get_audio_stream(CHUNK)
     
     # 0.5 Sekunden "Stille" einlesen, um Hardware-Puffer vom TTS auszulöschen
@@ -85,7 +84,6 @@ def listen_for_wakeword(interrupt_check=None):
                 # Trigger threshold 0.5
                 if oww_model.prediction_buffer[mdl][-1] > 0.5:
                     if 'jarvis' in mdl.lower() or 'alexa' in mdl.lower() or 'mycroft' in mdl.lower():
-                        print(f"\nWake word '{mdl}' detected!")
                         mic_stream.stop_stream()
                         mic_stream.close()
                         # Spiele den Sound ab
@@ -97,7 +95,6 @@ def listen_for_wakeword(interrupt_check=None):
         exit(0)
 
 def record_until_silence(silence_duration=5.0):
-    print(f"Recording... (stops after {silence_duration}s of silence)")
     # VAD works well with 512 frames
     mic_stream = get_audio_stream(512)
     
@@ -126,14 +123,12 @@ def record_until_silence(silence_duration=5.0):
                     if silence_start is None:
                         silence_start = time.time()
                     elif time.time() - silence_start > silence_duration:
-                        print("Silence detected. Stopping recording.")
                         break
                 else:
                     # If user hasn't spoken yet after 10s, timeout
                     if silence_start is None:
                         silence_start = time.time()
                     elif time.time() - silence_start > 10.0:
-                        print("Timeout: No speech detected.")
                         break
                     
     finally:

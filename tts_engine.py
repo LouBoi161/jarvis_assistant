@@ -147,7 +147,13 @@ class TTSEngine:
                             temperature=0.8, top_p=0.9, repetition_penalty=1.1
                         )
                     else:
-                        wavs, sr = self.model.generate(text=chunk, language="German", instruction=instruction, temperature=0.8)
+                        # Fallback to a built-in speaker if no custom voice is found
+                        wavs, sr = self.model.generate_custom_voice(
+                            text=chunk, language="German", 
+                            speaker="Claribel Dervla", # Ein angenehmer Standard-Speaker
+                            instruction=instruction, 
+                            temperature=0.8
+                        )
                     
                     sf.write(output_file, wavs[0], sr)
                     audio_queue.put(output_file)

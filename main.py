@@ -21,14 +21,14 @@ WHISPER_MODEL = "base"
 
 class JarvisAssistant:
     def __init__(self):
-        print("\n--- JARVIS INITIALISIERUNG ---")
-        
         # Standardmäßig debug, bis config geladen ist
         self.view_mode = "debug"
         self.ollama_model = None
         
         # Konfiguration laden
         self.load_config()
+        
+        self.log("\n--- JARVIS INITIALISIERUNG ---", "standard")
 
         # Whisper STT zuerst laden, um es an TTSEngine zu übergeben
         self.log(f"Lade Whisper STT Modell ({WHISPER_MODEL})...", "debug")
@@ -52,13 +52,18 @@ class JarvisAssistant:
 
     def log(self, message, level="debug"):
         """Filtert Ausgaben basierend auf dem view_mode."""
-        if self.view_mode == "debug":
+        if not message: return
+        
+        import re
+        if self.view_mode == "standard":
+            if level == "standard":
+                # Emotion-Tags entfernen (z.B. [freundlich])
+                clean_message = re.sub(r"\[[A-Za-zäöüß]+\]", "", message).strip()
+                if clean_message:
+                    print(clean_message)
+        else:
             # Im Debug-Modus alles anzeigen
             print(message)
-        else:
-            # Im Standard-Modus nur wichtige Chat-Events anzeigen
-            if level == "standard":
-                print(message)
 
     def load_config(self):
         """Lädt die Einstellungen aus der config.json."""
