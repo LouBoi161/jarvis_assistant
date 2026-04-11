@@ -277,8 +277,12 @@ class JarvisAssistant:
             if json_match:
                 json_string = json_match.group(1)
                 
-                # SÄUBERUNG: Entferne das JSON und alle Tags komplett aus dem Sprechtext
+                # SÄUBERUNG: Entferne JSON, Code-Blöcke und alle Tags komplett aus dem Sprechtext
                 speech_text = response_text.replace(json_string, "").strip()
+                # Radikal alle Markdown Code-Blöcke entfernen (```...```)
+                speech_text = re.sub(r"```[a-z]*\n.*?\n```", "", speech_text, flags=re.DOTALL | re.IGNORECASE)
+                speech_text = re.sub(r"```.*?```", "", speech_text, flags=re.DOTALL)
+                # Tags entfernen
                 speech_text = re.sub(r"<(thought|think)>.*?</\1>", "", speech_text, flags=re.DOTALL)
                 speech_text = re.sub(r"<[^>]+>", "", speech_text)
                 
