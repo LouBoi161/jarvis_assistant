@@ -94,7 +94,6 @@ class TTSEngine:
             instruction = tag_map.get(tag, instruction)
 
         display_text = re.sub(r"\[[A-Za-zäöüß]+\]", "", text).strip()
-        print(f"\n[Jarvis spricht]: {display_text}")
         clean_text = display_text.replace("###", "").replace("***", "").replace("`", "").replace("*", "").replace("_", "")
         
         # 2. Splitting-Logik
@@ -147,18 +146,24 @@ class TTSEngine:
                             temperature=0.8, top_p=0.9, repetition_penalty=1.1
                         )
                     else:
-                        # Fallback to a built-in speaker if no custom voice is found
-                        wavs, sr = self.model.generate_custom_voice(
-                            text=chunk, language="German", 
-                            speaker="Claribel Dervla", # Ein angenehmer Standard-Speaker
-                            instruction=instruction, 
-                            temperature=0.8
-                        )
+                        # Fallback try custom voice (if instruct model)
+                        try:
+                            wavs, sr = self.model.generate_custom_voice(
+                                text=chunk, language="German", 
+                                speaker="Claribel Dervla",
+                                instruction=instruction, 
+                                temperature=0.8
+                            )
+                        except:
+                            # If no voice cloning is possible and custom voice fails, 
+                            # we silently fail here or use a simpler TTS if needed.
+                            # For now, just break without error spam.
+                            break
                     
                     sf.write(output_file, wavs[0], sr)
                     audio_queue.put(output_file)
-                except Exception as e:
-                    print(f"Fehler bei Generierung: {e}")
+                except Exception:
+                    # Silent failure in standard mode
                     audio_queue.put(None)
             audio_queue.put("DONE")
 

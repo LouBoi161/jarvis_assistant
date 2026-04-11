@@ -273,6 +273,7 @@ class JarvisAssistant:
                 
                 try:
                     data = json.loads(json_string)
+                    # Tool Execution loggen
                     self.log(f"[Tool Execution] {data.get('tool')}: {data.get('kwargs')}", "standard")
                     
                     tool_result = parse_and_execute_tool(json_string)
@@ -281,6 +282,7 @@ class JarvisAssistant:
                     self.history.append({"role": "system", "content": f"Systemfehler: {e}"})
             else:
                 self.history.append({"role": "assistant", "content": response_text})
+                # Nur einmal loggen im Standard-Modus
                 self.log(f"[{self.ollama_model}]: {response_text}", "standard")
                 self.speak_with_interrupt(response_text)
                 break
