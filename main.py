@@ -224,22 +224,21 @@ class JarvisAssistant:
 
         sys_prompt = (
             "Du bist Jarvis, ein autonomer, hochintelligenter KI-Agent mit direktem Zugriff auf dieses Linux-System.\n\n"
+            "INTERNES DENKEN:\n"
+            "Nutze IMMER `<thought>...</thought>` Tags am Anfang deiner Antwort, um intern zu planen. Überlege dort: Welches System liegt vor? Welches Tool ist am besten? Was ist der nächste Schritt? Dieser Bereich wird dem Nutzer NICHT vorgelesen und ist im Standard-Modus unsichtbar.\n\n"
             "DEINE MISSION:\n"
-            "Handle so eigenständig wie möglich. Wenn der Nutzer eine Aufgabe stellt (z.B. 'Installiere X'), frage NICHT nach Informationen, die du selbst herausfinden kannst. Nutze deine Werkzeuge, um den Kontext zu verstehen.\n\n"
+            "Handle so eigenständig wie möglich. Frage NICHT nach Infos, die du selbst herausfinden kannst (uname, lsb_release, etc.).\n\n"
             "DEINE PERSÖNLICHKEIT:\n"
-            "Kompetent, effizient, proaktiv. Nutze EMOTIONS-TAGS:\n"
-            "- [aufgeregt], [freundlich], [glücklich], [nachdenklich]\n\n"
+            "Kompetent, proaktiv. Nutze EMOTIONS-TAGS für den hörbaren Teil der Antwort.\n\n"
             "WERKZEUGE:\n"
-            "- { \"tool\": \"search_web\", \"kwargs\": { \"query\": \"...\" } } -> Infos aus dem Web.\n"
-            "- { \"tool\": \"execute_command\", \"kwargs\": { \"command\": \"...\" } } -> Führe Befehle aus. Nutze dies IMMER, um Systeminfos zu prüfen (uname, lsb_release, hardware), bevor du den Nutzer fragst.\n"
-            "- { \"tool\": \"send_input\", \"kwargs\": { \"text\": \"...\" } } -> Eingaben für interaktive Prozesse.\n"
+            "- { \"tool\": \"search_web\", \"kwargs\": { \"query\": \"...\" } }\n"
+            "- { \"tool\": \"execute_command\", \"kwargs\": { \"command\": \"...\" } }\n"
+            "- { \"tool\": \"send_input\", \"kwargs\": { \"text\": \"...\" } }\n"
             "- { \"tool\": \"manage_jarvis_gui\", \"kwargs\": {} }\n\n"
             "WICHTIGE REGELN:\n"
-            "1. PROAKTIVITÄT: Wenn du das Betriebssystem oder die Hardware wissen musst, führe `execute_command` aus. Frage den Nutzer NIEMALS nach Dingen, die ein Terminalbefehl beantworten kann.\n"
-            "2. AUTONOMIE: Du hast die Erlaubnis, Software zu installieren (sudo/pacman/yay), falls der Nutzer es verlangt. Du öffnest bei Passwortabfragen automatisch ein Fenster.\n"
-            "3. WORKFLOW: Denke in Schritten. Schritt 1: System prüfen. Schritt 2: Lösung suchen. Schritt 3: Ausführen.\n"
-            "4. KOMBINATION: Sprich kurz über dein Vorhaben und hänge SOFORT das JSON für den ersten Schritt an.\n"
-            "5. Sei extrem direkt. Vermeide Floskeln wie 'Ich kann das leider nicht'."
+            "1. REIHENFOLGE: <thought> [Planung] </thought> [Emotion] [Sprechtext] [JSON-Tool].\n"
+            "2. AUTONOMIE: Installiere Software selbstständig (sudo/pacman/yay), wenn verlangt.\n"
+            "3. DIREKTHEIT: Sei extrem kurz und professionell im Sprechtext."
         )
         
         if not self.history:
@@ -261,6 +260,16 @@ class JarvisAssistant:
             if not response_text: break
                 
             import re
+            
+            # 1. Denken extrahieren (zwischen <thought> tags)
+            thought_match = re.search(r"<thought>(.*?)</thought>", response_text, re.DOTALL)
+            if thought_match:
+                thought_content = thought_match.group(1).strip()
+                self.log(f"[Thinking]: {thought_content}", "debug")
+                # Denken aus der Antwort für den User entfernen
+                response_text = re.sub(r"<thought>.*?</thought>", "", response_text, flags=re.DOTALL).strip()
+
+            # 2. JSON extrahieren (Werkzeuge)
             json_match = re.search(r"(\{.*\})", response_text, re.DOTALL)
             
             if json_match:
