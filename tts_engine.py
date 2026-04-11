@@ -9,7 +9,7 @@ import re
 from qwen_tts import Qwen3TTSModel
 
 class TTSEngine:
-    def __init__(self, use_gpu=False):
+    def __init__(self, use_gpu=False, stt_model=None):
         # Wir schalten GPU für TTS standardmäßig aus, da deine 12GB VRAM 
         # bereits fast komplett von Ollama (Gemma 4) belegt sind.
         # Das 0.6B Modell ist auf der CPU immer noch sehr schnell.
@@ -31,7 +31,11 @@ class TTSEngine:
                 dtype=torch.float32
             )
         
-        self.stt_model = whisper.load_model("base")
+        # Nutze das bereits geladene Whisper Modell falls vorhanden, sonst lade es neu
+        if stt_model:
+            self.stt_model = stt_model
+        else:
+            self.stt_model = whisper.load_model("base")
         
         script_dir = os.path.dirname(os.path.abspath(__file__))
         self.ref_wav = os.path.join(script_dir, "voice.wav")

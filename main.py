@@ -22,7 +22,14 @@ WHISPER_MODEL = "base"
 class JarvisAssistant:
     def __init__(self):
         print("\n--- JARVIS INITIALISIERUNG ---")
-        self.tts = TTSEngine(use_gpu=False)
+        
+        # Whisper STT zuerst laden, um es an TTSEngine zu übergeben
+        print(f"Lade Whisper STT Modell ({WHISPER_MODEL})...")
+        self.stt_model = whisper.load_model(WHISPER_MODEL)
+        
+        # TTSEngine das bereits geladene Whisper Modell mitgeben (spart RAM)
+        self.tts = TTSEngine(use_gpu=False, stt_model=self.stt_model)
+        
         self.history = []
         self.text_mode = False
         self.processing_lock = threading.Lock()
@@ -36,9 +43,6 @@ class JarvisAssistant:
         if not self.ollama_model:
             print("[System]: Erster Start erkannt. Bitte wähle ein Modell in den Einstellungen.")
             self.open_settings()
-
-        print(f"Lade Whisper STT Modell ({WHISPER_MODEL})...")
-        self.stt_model = whisper.load_model(WHISPER_MODEL)
 
         if self.ollama_model:
             self.check_ollama_model(self.ollama_model)
