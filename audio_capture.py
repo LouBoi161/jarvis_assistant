@@ -34,27 +34,35 @@ def play_notification(filename="notification.wav"):
     
     if not os.path.exists(full_path):
         return
+    
+    # Lokale Instanz für den Sound-Effekt, um Konflikte zu vermeiden
+    p_play = None
     try:
         wf = wave.open(full_path, 'rb')
-        p = pyaudio.PyAudio()
-        stream = p.open(format=p.get_format_from_width(wf.getsampwidth()),
+        p_play = pyaudio.PyAudio()
+        
+        # Puffergröße auf 2048 als stabilen Mittelwert
+        stream = p_play.open(format=p_play.get_format_from_width(wf.getsampwidth()),
                         channels=wf.getnchannels(),
                         rate=wf.getframerate(),
                         output=True,
-                        frames_per_buffer=4096)
-        # Wir lesen in kleineren Häppchen, schicken aber an den großen Puffer
+                        frames_per_buffer=2048)
+        
+        # Wir lesen in Häppchen von 1024, schicken aber an den 2048er Puffer
         data = wf.readframes(1024)
         while len(data) > 0:
             stream.write(data)
             data = wf.readframes(1024)
         
-        # Kurze Pause damit der Puffer sicher leer ist
-        time.sleep(0.05)
+        # Sicherstellen, dass alles abgespielt wurde
+        time.sleep(0.1)
         stream.stop_stream()
         stream.close()
-        p.terminate()
     except Exception as e:
         print(f"Fehler beim Abspielen des Benachrichtigungstons: {e}")
+    finally:
+        if p_play:
+            p_play.terminate()
 
 def listen_for_wakeword(interrupt_check=None):
     # Wir laden das Modell bei jedem neuen Durchlauf frisch in den Speicher. 

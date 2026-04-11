@@ -197,14 +197,15 @@ class TTSEngine:
                 wf = wave.open(file_path, 'rb')
                 stream = p.open(format=p.get_format_from_width(wf.getsampwidth()),
                                 channels=wf.getnchannels(), rate=wf.getframerate(), output=True,
-                                frames_per_buffer=4096)
+                                frames_per_buffer=2048)
                 
-                data = wf.readframes(4096)
+                data = wf.readframes(1024)
                 while len(data) > 0:
                     if interrupt_event and interrupt_event.is_set():
                         break
                     stream.write(data)
-                    data = wf.readframes(4096)
+                    # Schnelleres Auslesen für stabilen Puffer-Fluss
+                    data = wf.readframes(1024)
                 
                 stream.stop_stream()
                 stream.close()
