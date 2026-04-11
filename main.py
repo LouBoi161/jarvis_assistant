@@ -147,6 +147,41 @@ class JarvisAssistant:
             
         return False
 
+    def speak_with_interrupt(self, text):
+        """Spricht Text aus und hört gleichzeitig auf das Wake Word zum Unterbrechen."""
+        if not text or not text.strip(): return
+        
+        interrupt_event = threading.Event()
+        self.interrupted_by_wakeword = False
+
+        def wakeword_listener():
+            try:
+                from openwakeword.model import Model
+                # Wir nutzen hier eine frische Instanz für den Interrupt
+                oww = Model(wakeword_models=["hey_jarvis"], inference_framework="onnx")
+                mic = audio_capture.get_audio_stream(audio_capture.CHUNK)
+                # Puffer leeren
+                for _ in range(6): mic.read(audio_capture.CHUNK, exception_on_overflow=False)
+                
+                while not interrupt_event.is_set():
+                    data = mic.read(audio_capture.CHUNK, exception_on_overflow=False)
+                    if oww.predict(np.frombuffer(data, dtype=np.int16))['hey_jarvis'] > 0.5:
+                        print("\n[System]: Unterbrechung durch Wake Word erkannt!")
+                        self.interrupted_by_wakeword = True
+                        interrupt_event.set()
+                        break
+                mic.stop_stream()
+                mic.close()
+            except Exception as e:
+                print(f"Fehler im Interrupt-Listener: {e}")
+
+        listener_thread = threading.Thread(target=wakeword_listener, daemon=True)
+        listener_thread.start()
+        
+        self.tts.speak(text, interrupt_event=interrupt_event)
+        interrupt_event.set() # Falls TTS fertig ist, beende den Listener-Thread
+        listener_thread.join(timeout=1.0)
+
     def run_ollama_agent(self, user_text):
         # Slash-Commands abfangen
         if user_text.startswith("/"):
@@ -181,6 +216,7 @@ class JarvisAssistant:
         
         MAX_STEPS = 10
         for step in range(MAX_STEPS):
+            if self.interrupted_by_wakeword: break
             if len(self.history) > 30:
                 self.history = [self.history[0]] + self.history[-29:]
                 
@@ -202,7 +238,8 @@ class JarvisAssistant:
                 # Vorab-Text sprechen, falls vorhanden (z.B. "Ich schaue mal nach...")
                 speech_text = response_text.replace(json_string, "").strip()
                 if speech_text:
-                    self.tts.speak(speech_text)
+                    self.speak_with_interrupt(speech_text)
+                    if self.interrupted_by_wakeword: break
                 
                 self.history.append({"role": "assistant", "content": response_text})
                 
@@ -228,34 +265,16 @@ class JarvisAssistant:
                     self.history.append({"role": "system", "content": f"Systemfehler: {e}"})
             else:
                 self.history.append({"role": "assistant", "content": response_text})
-                
-                # Interrupt Listener für Sprachausgabe
-                interrupt_event = threading.Event()
-                def wakeword_listener():
-                    try:
-                        from openwakeword.model import Model
-                        oww = Model(wakeword_models=["hey_jarvis"], inference_framework="onnx")
-                        mic = audio_capture.get_audio_stream(audio_capture.CHUNK)
-                        for _ in range(6): mic.read(audio_capture.CHUNK, exception_on_overflow=False)
-                        while not interrupt_event.is_set():
-                            data = mic.read(audio_capture.CHUNK, exception_on_overflow=False)
-                            if oww.predict(np.frombuffer(data, dtype=np.int16))['hey_jarvis'] > 0.5:
-                                self.interrupted_by_wakeword = True
-                                interrupt_event.set()
-                                break
-                        mic.stop_stream(); mic.close()
-                    except: pass
-
-                threading.Thread(target=wakeword_listener, daemon=True).start()
-                self.tts.speak(response_text, interrupt_event=interrupt_event)
-                interrupt_event.set()
+                self.speak_with_interrupt(response_text)
                 break
 
     def voice_input_worker(self):
         """Hintergrund-Thread für das Wake Word."""
         while True:
             try:
+                # Falls wir durch Wake-Word unterbrochen wurden, springen wir direkt zur Aufnahme
                 if self.interrupted_by_wakeword:
+                    audio_capture.play_notification()
                     detected = True
                     self.interrupted_by_wakeword = False
                 else:
@@ -267,6 +286,7 @@ class JarvisAssistant:
                     text = self.transcribe_audio("latest_input.wav")
                     
                     if text.lower().strip('.!? ') in ["stop", "stopp", "halt", "abbrechen"]:
+                        print("[System]: Befehl abgebrochen.")
                         continue
                         
                     if len(text) > 2:
