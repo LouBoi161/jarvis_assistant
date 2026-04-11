@@ -295,6 +295,7 @@ class JarvisAssistant:
                     self.log(f">>>> [DETAILS]: {tool_args}\n", "standard")
                     
                     tool_result = parse_and_execute_tool(json_string)
+                    self.log(f">>>> [INFO]: Werkzeug-Ausführung abgeschlossen. Verarbeite Ergebnisse...\n", "standard")
                     self.history.append({"role": "system", "content": f"Tool Ergebnis:\n{tool_result}"})
                 except Exception as e:
                     self.history.append({"role": "system", "content": f"Systemfehler: {e}"})
