@@ -2,10 +2,8 @@ __pycache__/
 .venv/
 venv/
 *.wav
+!notification.wav
 *.pyc
 .DS_Store
 .env
 .vscode/
-# We want to keep some wav if it's a notification, but usually we ignore generated ones.
-# Actually, the user asked to remove personal ones, but some are generated during runtime.
-# So ignoring all .wav is safer for a release.
