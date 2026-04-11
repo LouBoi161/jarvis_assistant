@@ -291,15 +291,20 @@ class JarvisAssistant:
                 
                 try:
                     data = json.loads(json_string)
-                    # Tool Execution EXTREM PROMINENT hervorheben
                     tool_name = data.get('tool')
-                    tool_args = data.get('kwargs')
-                    self.log(f"\n>>>> [JARVIS AKTIV]: Nutze Werkzeug '{tool_name}'", "standard")
-                    self.log(f">>>> [DETAILS]: {tool_args}\n", "standard")
+                    tool_args = data.get('kwargs', {})
                     
-                    tool_result = parse_and_execute_tool(json_string)
-                    self.log(f">>>> [INFO]: Werkzeug-Ausführung abgeschlossen. Verarbeite Ergebnisse...\n", "standard")
-                    self.history.append({"role": "system", "content": f"Tool Ergebnis:\n{tool_result}"})
+                    if tool_name:
+                        self.log(f"\n>>>> [JARVIS AKTIV]: Nutze Werkzeug '{tool_name}'", "standard")
+                        self.log(f">>>> [DETAILS]: {tool_args}\n", "standard")
+                        
+                        tool_result = parse_and_execute_tool(json_string)
+                        self.log(f">>>> [INFO]: Werkzeug-Ausführung abgeschlossen. Verarbeite Ergebnisse...\n", "standard")
+                        self.history.append({"role": "system", "content": f"Tool Ergebnis:\n{tool_result}"})
+                    else:
+                        self.log(">>>> [FEHLER]: KI hat ein ungültiges Werkzeug-Format gesendet.", "debug")
+                except Exception as e:
+                    self.log(f">>>> [FEHLER]: JSON-Parsing fehlgeschlagen: {e}", "debug")
                 except Exception as e:
                     self.history.append({"role": "system", "content": f"Systemfehler: {e}"})
             else:
