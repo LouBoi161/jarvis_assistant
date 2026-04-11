@@ -94,8 +94,19 @@ class TTSEngine:
             instruction = tag_map.get(tag, instruction)
 
         display_text = re.sub(r"\[[A-Za-zäöüß]+\]", "", text).strip()
-        # Zeilenumbrüche entfernen, da sie das Modell oft zum Absturz bringen
-        clean_text = display_text.replace("\n", " ").replace("###", "").replace("***", "").replace("`", "").replace("*", "").replace("_", "")
+        
+        # --- TEXT NORMALISIERUNG FÜR TTS ---
+        # 1. Uhrzeiten umwandeln (10:08 -> 10 Uhr 08), da Doppelpunkte oft Teile überspringen lassen
+        clean_text = re.sub(r"(\d{1,2}):(\d{2})", r"\1 Uhr \2", display_text)
+        
+        # 2. Zeilenumbrüche und Markdown-Reste entfernen
+        clean_text = clean_text.replace("\n", " ").replace("###", "").replace("***", "").replace("`", "").replace("*", "").replace("_", "")
+        
+        # 3. Klammern entfernen (oft verwirrend für die KI)
+        clean_text = clean_text.replace("(", " ").replace(")", " ")
+        
+        # 4. Mehrfache Leerzeichen säubern
+        clean_text = re.sub(r"\s+", " ", clean_text).strip()
         
         # 2. Splitting-Logik
         MAX_CHARS = 400
