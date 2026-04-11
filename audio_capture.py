@@ -69,7 +69,8 @@ def listen_for_wakeword(interrupt_check=None):
     # Das dauert nur wenige Millisekunden, garantiert aber, dass der interne Puffer 
     # (der für das sofortige Auslösen verantwortlich war) absolut leer ist.
     try:
-        oww_model = Model(wakeword_models=["hey_jarvis"], inference_framework="onnx")
+        # Entferne inference_framework, da es in neueren Versionen zu Fehlern führt
+        oww_model = Model(wakeword_models=["hey_jarvis"])
     except Exception:
         oww_model = Model()
 

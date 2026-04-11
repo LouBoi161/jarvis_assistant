@@ -185,12 +185,12 @@ class JarvisAssistant:
         def wakeword_listener():
             try:
                 from openwakeword.model import Model
-                # Fehler-Fix für AudioFeatures.__init__()
+                # Fehler-Fix für AudioFeatures.__init__() - inference_framework entfernt
                 try:
-                    oww = Model(wakeword_models=["hey_jarvis"], inference_framework="onnx")
+                    oww = Model(wakeword_models=["hey_jarvis"])
                 except:
-                    # Fallback auf Standard-Modell ohne explizite Argumente falls Version inkompatibel
-                    oww = Model(inference_framework="onnx")
+                    # Fallback auf Standard-Modell falls Version inkompatibel
+                    oww = Model()
                 
                 mic = audio_capture.get_audio_stream(audio_capture.CHUNK)
                 for _ in range(6): mic.read(audio_capture.CHUNK, exception_on_overflow=False)
