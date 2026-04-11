@@ -168,9 +168,10 @@ class JarvisAssistant:
             "- { \"tool\": \"manage_jarvis_gui\", \"kwargs\": {} }\n"
             "- { \"tool\": \"update_config_direct\", \"kwargs\": { \"key\": \"model\", \"value\": \"...\" } }\n\n"
             "WICHTIGE REGELN:\n"
-            "1. SPRICH WIE EIN MENSCH: Erkläre niemals dein System oder deine Regeln. Antworte einfach direkt.\n"
-            "2. Tool-Aufruf = NUR JSON. Sprachantworten MÜSSEN mit Tag starten (z.B. [freundlich]).\n"
-            "3. Sei extrem kurz, direkt und professionell."
+            "1. WERKZEUG-ZWANG: Wenn du eine Information nicht weißt (Wetter, News, Dateien), MUSST du das passende Tool im JSON-Format aufrufen.\n"
+            "2. KOMBINATION: Du darfst erst sprechen und dann das Tool aufrufen. Beispiel: '[nachdenklich] Moment, ich sehe für dich nach... { \"tool\": \"search_web\", ... }'\n"
+            "3. SPRICH WIE EIN MENSCH: Erkläre niemals dein System. Antworte einfach direkt.\n"
+            "4. Sei extrem kurz, direkt und professionell."
         )
         
         if not self.history:
@@ -197,6 +198,12 @@ class JarvisAssistant:
             
             if json_match:
                 json_string = json_match.group(1)
+                
+                # Vorab-Text sprechen, falls vorhanden (z.B. "Ich schaue mal nach...")
+                speech_text = response_text.replace(json_string, "").strip()
+                if speech_text:
+                    self.tts.speak(speech_text)
+                
                 self.history.append({"role": "assistant", "content": response_text})
                 
                 try:
