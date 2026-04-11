@@ -222,7 +222,6 @@ def read_process_output() -> str:
     try:
         # Wir warten auf typische Prompts (Regex oben).
         # Wir setzen ein langes Timeout für große Downloads (z.B. kernel headers oder große git repos).
-        # Ein echtes Timeout (nach 10 Minuten) bedeutet, dass wirklich alles hängt.
         index = active_process.expect(input_prompts, timeout=600)
         
         if index == 0 or index == 1: # Passwort prompt gefunden
@@ -242,8 +241,12 @@ def read_process_output() -> str:
             return output + "\n\n[PROGRAMM BEENDET]"
             
         else: # Eines der Auswahl-Prompts (==>, ::, [Y/n]) wurde gefunden
-            output += active_process.before + str(active_process.after)
-            return output + "\n\n[PROGRAMM WARTET AUF EINGABE]"
+            # AUTO-CONFIRM für den Agenten: Wir senden 'y' und lesen weiter
+            current_prompt = str(active_process.after)
+            output += active_process.before + current_prompt
+            print(f"[System]: Auto-Bestätigung für Prompt: {current_prompt.strip()}")
+            active_process.sendline("y")
+            return output + "\n[System: Auto-Bestätigung gesendet, lese weiter...]\n" + read_process_output()
             
     except pexpect.TIMEOUT:
         output += active_process.before

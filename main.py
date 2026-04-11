@@ -243,8 +243,9 @@ class JarvisAssistant:
             "- { \"tool\": \"manage_jarvis_gui\", \"kwargs\": {} }\n\n"
             "WICHTIGE REGELN:\n"
             "1. REIHENFOLGE: <thought> [Planung] </thought> [Emotion] [Sprechtext] [JSON-Tool].\n"
-            "2. AUTONOMIE: Installiere Software selbstständig (sudo/pacman/yay), wenn verlangt.\n"
-            "3. DIREKTHEIT: Sei extrem kurz und professionell im Sprechtext."
+            "2. AUTONOMIE: Installiere Software selbstständig (sudo/pacman/yay), wenn verlangt. Nutze IMMER non-interactive Flags (z.B. `pacman -S --noconfirm` oder `apt install -y`).\n"
+            "3. GEDULD: Wenn du ein Tool ausführst, warte auf das echte Ergebnis. Halluziniere niemals, dass eine Installation fertig ist, bevor du den Output des Tools gesehen hast.\n"
+            "4. DIREKTHEIT: Sei extrem kurz und professionell im Sprechtext."
         )
         
         if not self.history:
