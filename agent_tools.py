@@ -217,12 +217,10 @@ def send_input(text: str) -> str:
         return f"Fehler beim Senden der Eingabe: {e}"
 
 def read_process_output() -> str:
-    """Liest den Output des Terminals, bis es pausiert (Passwortabfrage, User Input oder Ende)."""
+    """Liest den Output des Terminals in einer Schleife, bis es pausiert oder beendet ist."""
     global active_process
-    output = ""
+    full_output = ""
     
-    # Regelmäßige Ausdrücke für typische Paketmanager/Installer Prompts in Linux (yay, pacman, apt)
-    # y/n, Y/n, yes/no, [1 2 3], :: etc.
     input_prompts = [
         '(?i)password', 
         '(?i)passwort', 
@@ -236,40 +234,43 @@ def read_process_output() -> str:
         pexpect.EOF
     ]
     
-    try:
-        # Wir warten auf typische Prompts (Regex oben).
-        # Wir setzen ein langes Timeout für große Downloads (z.B. kernel headers oder große git repos).
-        index = active_process.expect(input_prompts, timeout=600)
-        
-        if index == 0 or index == 1: # Passwort prompt gefunden
-            output += active_process.before + str(active_process.after)
-            print("[System]: Passwort-Anfrage erkannt. Öffne GUI-Fenster...")
-            pwd = get_gui_password()
-            if pwd:
-                active_process.sendline(pwd)
-                output += "\n[System: Passwort wurde eingegeben, lese weiter...]\n"
-                return read_process_output()
-            else:
-                active_process.sendline("\x03") # Ctrl+C
-                return output + "\n[System: Passwort-Eingabe wurde vom Benutzer abgebrochen.]"
+    while True:
+        try:
+            index = active_process.expect(input_prompts, timeout=60)
+            
+            # Text vor dem Match sichern
+            output_chunk = active_process.before + (str(active_process.after) if active_process.after != pexpect.EOF else "")
+            full_output += output_chunk
+            
+            if index == 0 or index == 1: # Passwort prompt
+                print("[System]: Passwort-Anfrage erkannt. Öffne GUI-Fenster...")
+                pwd = get_gui_password()
+                if pwd:
+                    active_process.sendline(pwd)
+                    # Kurze Pause für die Verarbeitung
+                    import time
+                    time.sleep(0.5)
+                    full_output += "\n[System: Passwort gesendet]\n"
+                    continue # Weiterlesen in der Schleife
+                else:
+                    active_process.sendline("\x03") # Ctrl+C
+                    return full_output + "\n[System: Abbruch durch Benutzer]"
+                    
+            elif index == len(input_prompts) - 1: # EOF
+                return full_output + "\n\n[BEFEHL ABGESCHLOSSEN]"
                 
-        elif index == len(input_prompts) - 1: # EOF -> Programm beendet
-            output += active_process.before
-            return output + "\n\n[PROGRAMM BEENDET]"
-            
-        else: # Eines der Auswahl-Prompts (==>, ::, [Y/n]) wurde gefunden
-            # AUTO-CONFIRM für den Agenten: Wir senden 'y' und lesen weiter
-            current_prompt = str(active_process.after)
-            output += active_process.before + current_prompt
-            print(f"[System]: Auto-Bestätigung für Prompt: {current_prompt.strip()}")
-            active_process.sendline("y")
-            return output + "\n[System: Auto-Bestätigung gesendet, lese weiter...]\n" + read_process_output()
-            
-    except pexpect.TIMEOUT:
-        output += active_process.before
-        return output + "\n\n[System: Timeout (10 Min). Der Prozess antwortet nicht mehr oder erzeugt keine Ausgabe mehr.]"
-    except Exception as e:
-        return output + f"\n[Fehler beim Lesen des Outputs: {e}]"
+            else: # Auto-Confirm für andere Prompts
+                current_prompt = str(active_process.after)
+                print(f"[System]: Auto-Bestätigung (y) für: {current_prompt.strip()}")
+                active_process.sendline("y")
+                full_output += f"\n[System: Auto-Bestätigung 'y' für {current_prompt}]\n"
+                continue
+                
+        except pexpect.TIMEOUT:
+            # Wenn 60 Sekunden lang nichts kommt, geben wir den aktuellen Stand zurück
+            return full_output + "\n\n[System: Timeout - Befehl läuft evtl. noch im Hintergrund]"
+        except Exception as e:
+            return full_output + f"\n[Fehler beim Lesen des Outputs: {e}]"
 
 def parse_and_execute_tool(json_string: str) -> str:
     """Parst die JSON-Antwort von Gemma und führt das entsprechende Tool aus."""
