@@ -23,8 +23,15 @@ class JarvisAssistant:
     def __init__(self):
         print("\n--- JARVIS INITIALISIERUNG ---")
         
+        # Standardmäßig debug, bis config geladen ist
+        self.view_mode = "debug"
+        self.ollama_model = None
+        
+        # Konfiguration laden
+        self.load_config()
+
         # Whisper STT zuerst laden, um es an TTSEngine zu übergeben
-        print(f"Lade Whisper STT Modell ({WHISPER_MODEL})...")
+        self.log(f"Lade Whisper STT Modell ({WHISPER_MODEL})...", "debug")
         self.stt_model = whisper.load_model(WHISPER_MODEL)
         
         # TTSEngine das bereits geladene Whisper Modell mitgeben (spart RAM)
@@ -34,18 +41,24 @@ class JarvisAssistant:
         self.text_mode = False
         self.processing_lock = threading.Lock()
         self.interrupted_by_wakeword = False
-        self.ollama_model = None
-
-        # Konfiguration laden
-        self.load_config()
 
         # Falls kein Modell in der Config ist -> Erststart-Modus
         if not self.ollama_model:
-            print("[System]: Erster Start erkannt. Bitte wähle ein Modell in den Einstellungen.")
+            self.log("Erster Start erkannt. Bitte wähle ein Modell in den Einstellungen.", "standard")
             self.open_settings()
 
         if self.ollama_model:
             self.check_ollama_model(self.ollama_model)
+
+    def log(self, message, level="debug"):
+        """Filtert Ausgaben basierend auf dem view_mode."""
+        if self.view_mode == "debug":
+            # Im Debug-Modus alles anzeigen
+            print(message)
+        else:
+            # Im Standard-Modus nur wichtige Chat-Events anzeigen
+            if level == "standard":
+                print(message)
 
     def load_config(self):
         """Lädt die Einstellungen aus der config.json."""
@@ -54,58 +67,71 @@ class JarvisAssistant:
                 with open(CONFIG_FILE, "r") as f:
                     config = json.load(f)
                     self.ollama_model = config.get("ollama_model")
-                    if self.ollama_model:
-                        print(f"[System]: Konfiguration geladen. Modell: {self.ollama_model}")
-                        return
+                    self.view_mode = config.get("view_mode", "standard")
+                    self.log(f"Konfiguration geladen. Modell: {self.ollama_model}, Mode: {self.view_mode}", "debug")
+                    return
             except Exception as e:
-                print(f"Fehler beim Laden der Config: {e}")
+                self.log(f"Fehler beim Laden der Config: {e}", "debug")
         self.ollama_model = None
+        self.view_mode = "standard"
 
     def open_settings(self):
         """Öffnet die GUI-Einstellungen zur Modellauswahl."""
-        print("[System]: Öffne Einstellungen...")
-        res = parse_and_execute_tool(json.dumps({"tool": "manage_jarvis_gui", "kwargs": {"current_model": self.ollama_model or "Wähle ein Modell..."}}))
+        self.log("Öffne Einstellungen...", "debug")
+        res = parse_and_execute_tool(json.dumps({
+            "tool": "manage_jarvis_gui", 
+            "kwargs": {
+                "current_model": self.ollama_model or "Wähle ein Modell...",
+                "current_view_mode": self.view_mode
+            }
+        }))
         if res.startswith('{"type": "config_update"'):
             new_data = json.loads(res).get("data", {})
             if "model" in new_data:
                 self.ollama_model = new_data["model"]
-                self.save_config()
-                print(f"[System]: Modell auf '{self.ollama_model}' gesetzt.")
+            if "view_mode" in new_data:
+                self.view_mode = new_data["view_mode"]
+            self.save_config()
+            self.log(f"Einstellungen übernommen: {self.ollama_model} ({self.view_mode})", "standard")
         
         if not self.ollama_model:
-            print("[Fehler]: Kein Modell ausgewählt. Jarvis kann nicht starten.")
+            self.log("Kein Modell ausgewählt. Jarvis kann nicht starten.", "standard")
             os._exit(1)
 
     def save_config(self):
         """Speichert die aktuellen Einstellungen in die config.json."""
         try:
-            config = {"ollama_model": self.ollama_model}
+            config = {
+                "ollama_model": self.ollama_model,
+                "view_mode": self.view_mode
+            }
             with open(CONFIG_FILE, "w") as f:
                 json.dump(config, f, indent=4)
-            print("[System]: Konfiguration gespeichert.")
+            self.log("Konfiguration gespeichert.", "debug")
         except Exception as e:
-            print(f"Fehler beim Speichern der Config: {e}")
+            self.log(f"Fehler beim Speichern der Config: {e}", "debug")
 
     def check_ollama_model(self, model_name):
         # 1. Versuche zuerst den exakten Namen
         try:
             ollama.show(model_name)
             self.ollama_model = model_name
-            print(f"Ollama Modell '{model_name}' ist bereit.")
+            self.log(f"Ollama Modell '{model_name}' ist bereit.", "debug")
             return
         except Exception:
             pass
 
         # 2. Falls nicht gefunden -> GUI öffnen
-        print(f"[System]: Modell '{model_name}' wurde nicht gefunden.")
+        self.log(f"Modell '{model_name}' wurde nicht gefunden.", "standard")
         self.tts.speak(f"[nachdenklich] Ich konnte das Modell {model_name} nicht finden. Bitte wähle ein installiertes Modell aus.")
         self.open_settings()
 
     def transcribe_audio(self, wav_path):
-        print("Transkribiere Audio...")
+        self.log("Transkribiere Audio...", "debug")
         result = self.stt_model.transcribe(wav_path, language="de")
         text = result["text"].strip()
-        print(f"Erkannt (Whisper): '{text}'")
+        if text:
+            self.log(f"Du: {text}", "standard")
         return text
 
     def handle_slash_commands(self, text):
@@ -116,14 +142,7 @@ class JarvisAssistant:
         cmd = cmd_parts[0]
         
         if cmd == "/settings" or cmd == "/config":
-            print("[System]: Öffne Einstellungen direkt...")
-            res = parse_and_execute_tool(json.dumps({"tool": "manage_jarvis_gui", "kwargs": {"current_model": self.ollama_model}}))
-            if res.startswith('{"type": "config_update"'):
-                new_data = json.loads(res).get("data", {})
-                if "model" in new_data:
-                    self.ollama_model = new_data["model"]
-                    self.check_ollama_model(self.ollama_model)
-                self.tts.speak("[freundlich] Alles klar, ich habe die Einstellungen übernommen!")
+            self.open_settings()
             return True
             
         elif cmd == "/model":
@@ -132,12 +151,12 @@ class JarvisAssistant:
                 self.check_ollama_model(new_model)
                 self.tts.speak(f"[glücklich] Modell zu {self.ollama_model} gewechselt!")
             else:
-                print("[System]: Bitte gib einen Modellnamen an, z.B. /model gemma4:e2b")
+                self.log("Bitte gib einen Modellnamen an, z.B. /model gemma4:e2b", "standard")
             return True
             
         elif cmd == "/clear":
             self.history = []
-            print("[System]: Chat-Historie gelöscht.")
+            self.log("Chat-Historie gelöscht.", "standard")
             self.tts.speak("[freundlich] Mein Gedächtnis ist wieder wie neu!")
             return True
             
@@ -157,29 +176,35 @@ class JarvisAssistant:
         def wakeword_listener():
             try:
                 from openwakeword.model import Model
-                # Wir nutzen hier eine frische Instanz für den Interrupt
-                oww = Model(wakeword_models=["hey_jarvis"], inference_framework="onnx")
+                # Fehler-Fix für AudioFeatures.__init__()
+                try:
+                    oww = Model(wakeword_models=["hey_jarvis"], inference_framework="onnx")
+                except:
+                    # Fallback auf Standard-Modell ohne explizite Argumente falls Version inkompatibel
+                    oww = Model(inference_framework="onnx")
+                
                 mic = audio_capture.get_audio_stream(audio_capture.CHUNK)
-                # Puffer leeren
                 for _ in range(6): mic.read(audio_capture.CHUNK, exception_on_overflow=False)
                 
                 while not interrupt_event.is_set():
                     data = mic.read(audio_capture.CHUNK, exception_on_overflow=False)
-                    if oww.predict(np.frombuffer(data, dtype=np.int16))['hey_jarvis'] > 0.5:
-                        print("\n[System]: Unterbrechung durch Wake Word erkannt!")
+                    preds = oww.predict(np.frombuffer(data, dtype=np.int16))
+                    # Suche nach irgendeinem Wake Word mit hoher Wahrscheinlichkeit
+                    if any(v > 0.5 for k, v in preds.items() if "jarvis" in k.lower() or "hey_jarvis" in k.lower()):
+                        self.log("Unterbrechung durch Wake Word erkannt!", "debug")
                         self.interrupted_by_wakeword = True
                         interrupt_event.set()
                         break
                 mic.stop_stream()
                 mic.close()
             except Exception as e:
-                print(f"Fehler im Interrupt-Listener: {e}")
+                self.log(f"Fehler im Interrupt-Listener: {e}", "debug")
 
         listener_thread = threading.Thread(target=wakeword_listener, daemon=True)
         listener_thread.start()
         
         self.tts.speak(text, interrupt_event=interrupt_event)
-        interrupt_event.set() # Falls TTS fertig ist, beende den Listener-Thread
+        interrupt_event.set()
         listener_thread.join(timeout=1.0)
 
     def run_ollama_agent(self, user_text):
@@ -217,17 +242,15 @@ class JarvisAssistant:
         MAX_STEPS = 10
         for step in range(MAX_STEPS):
             if self.interrupted_by_wakeword: break
-            if len(self.history) > 30:
-                self.history = [self.history[0]] + self.history[-29:]
-                
-            response = ollama.chat(model=self.ollama_model, messages=self.history, stream=False)
-            response_text = response['message']['content'].strip()
             
-            if not response_text:
-                if step == 0:
-                    self.history.append({"role": "user", "content": "Deine letzte Antwort war leer. Bitte antworte jetzt."})
-                    continue
-                else: break
+            try:
+                response = ollama.chat(model=self.ollama_model, messages=self.history, stream=False)
+                response_text = response['message']['content'].strip()
+            except Exception as e:
+                self.log(f"Ollama Fehler: {e}", "debug")
+                break
+            
+            if not response_text: break
                 
             import re
             json_match = re.search(r"(\{.*\})", response_text, re.DOTALL)
@@ -235,9 +258,9 @@ class JarvisAssistant:
             if json_match:
                 json_string = json_match.group(1)
                 
-                # Vorab-Text sprechen, falls vorhanden (z.B. "Ich schaue mal nach...")
                 speech_text = response_text.replace(json_string, "").strip()
                 if speech_text:
+                    self.log(f"[{self.ollama_model}]: {speech_text}", "standard")
                     self.speak_with_interrupt(speech_text)
                     if self.interrupted_by_wakeword: break
                 
@@ -245,26 +268,15 @@ class JarvisAssistant:
                 
                 try:
                     data = json.loads(json_string)
-                    if data.get("tool") == "manage_jarvis_gui":
-                        data["kwargs"] = {"current_model": self.ollama_model}
-                        json_string = json.dumps(data)
-
-                    tool_result = parse_and_execute_tool(json_string)
+                    self.log(f"[Tool Execution] {data.get('tool')}: {data.get('kwargs')}", "standard")
                     
-                    if isinstance(tool_result, str) and tool_result.startswith('{"type": "config_update"'):
-                        res_json = json.loads(tool_result)
-                        new_data = res_json.get("data", {})
-                        if "model" in new_data:
-                            self.ollama_model = new_data["model"]
-                            self.check_ollama_model(self.ollama_model)
-                            self.save_config()
-                        tool_result = "Die Einstellungen wurden aktualisiert."
-
+                    tool_result = parse_and_execute_tool(json_string)
                     self.history.append({"role": "system", "content": f"Tool Ergebnis:\n{tool_result}"})
                 except Exception as e:
                     self.history.append({"role": "system", "content": f"Systemfehler: {e}"})
             else:
                 self.history.append({"role": "assistant", "content": response_text})
+                self.log(f"[{self.ollama_model}]: {response_text}", "standard")
                 self.speak_with_interrupt(response_text)
                 break
 
@@ -272,7 +284,6 @@ class JarvisAssistant:
         """Hintergrund-Thread für das Wake Word."""
         while True:
             try:
-                # Falls wir durch Wake-Word unterbrochen wurden, springen wir direkt zur Aufnahme
                 if self.interrupted_by_wakeword:
                     audio_capture.play_notification()
                     detected = True
@@ -285,24 +296,24 @@ class JarvisAssistant:
                     save_wav("latest_input.wav", audio_data)
                     text = self.transcribe_audio("latest_input.wav")
                     
-                    if text.lower().strip('.!? ') in ["stop", "stopp", "halt", "abbrechen"]:
-                        print("[System]: Befehl abgebrochen.")
+                    if text and text.lower().strip('.!? ') in ["stop", "stopp", "halt", "abbrechen"]:
+                        self.log("Befehl abgebrochen.", "standard")
                         continue
                         
-                    if len(text) > 2:
+                    if text and len(text) > 2:
                         with self.processing_lock:
                             self.run_ollama_agent(text)
-                            print(f"\n[TEXT MODUS ({self.ollama_model})] Gib einen Befehl ein:")
-                            print("> ", end="", flush=True)
+                            self.log(f"\n[TEXT MODUS ({self.ollama_model})] Gib einen Befehl ein:", "debug")
+                            self.log("> ", "debug")
             except Exception as e:
-                print(f"Fehler im Voice-Worker: {e}")
+                self.log(f"Fehler im Voice-Worker: {e}", "debug")
 
     def run(self):
-        print("\n===============================")
-        print(f" JARVIS HYBRID-MODUS BEREIT ")
-        print(f" Aktuelles Modell: {self.ollama_model} ")
-        print(" -> Sprich 'Hey Jarvis' ODER tippe einfach hier unten!")
-        print("===============================")
+        self.log("\n===============================", "standard")
+        self.log(f" JARVIS HYBRID-MODUS BEREIT ", "standard")
+        self.log(f" Aktuelles Modell: {self.ollama_model} ", "standard")
+        self.log(" -> Sprich 'Hey Jarvis' ODER tippe einfach hier unten!", "standard")
+        self.log("===============================", "standard")
         
         # Voice Input im Hintergrund starten
         threading.Thread(target=self.voice_input_worker, daemon=True).start()
@@ -314,9 +325,9 @@ class JarvisAssistant:
                     with self.processing_lock:
                         self.run_ollama_agent(user_input)
             except KeyboardInterrupt:
-                print("\nJarvis wird beendet."); break
+                self.log("\nJarvis wird beendet.", "standard"); break
             except Exception as e:
-                print(f"\nFehler im Terminal-Loop: {e}")
+                self.log(f"\nFehler im Terminal-Loop: {e}", "debug")
 
 if __name__ == "__main__":
     jarvis = JarvisAssistant()

@@ -10,43 +10,94 @@ from PyQt5.QtWidgets import QApplication, QInputDialog, QLineEdit, QComboBox, QV
 # Globale Variable für persistente Shell-Sitzung
 active_process = None
 
-def manage_jarvis_gui(current_model):
-    """Öffnet ein GUI-Fenster für die Jarvis-Konfiguration (nur Modell-Auswahl)."""
+def manage_jarvis_gui(current_model, current_view_mode="standard"):
+    """Öffnet ein modernes GUI-Fenster für die Jarvis-Konfiguration."""
     app = QApplication.instance()
     if app is None:
         app = QApplication(sys.argv)
         
     dialog = QDialog()
-    dialog.setWindowTitle("Jarvis Konfiguration")
+    dialog.setWindowTitle("JARVIS System Control")
+    dialog.setMinimumWidth(400)
+    
+    # Modernes Jarvis-Design (QSS)
+    dialog.setStyleSheet("""
+        QDialog {
+            background-color: #0b0e14;
+            color: #e0e0e0;
+            font-family: 'Segoe UI', 'Roboto', sans-serif;
+        }
+        QLabel {
+            color: #00d4ff;
+            font-size: 14px;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+        QComboBox, QCheckBox {
+            background-color: #1a1f29;
+            color: #ffffff;
+            border: 1px solid #00d4ff;
+            border-radius: 4px;
+            padding: 8px;
+            font-size: 13px;
+        }
+        QComboBox::drop-down {
+            border: none;
+        }
+        QPushButton {
+            background-color: #00d4ff;
+            color: #0b0e14;
+            border-radius: 4px;
+            padding: 12px;
+            font-size: 14px;
+            font-weight: bold;
+            margin-top: 20px;
+        }
+        QPushButton:hover {
+            background-color: #00a3c7;
+        }
+        QCheckBox::indicator {
+            width: 18px;
+            height: 18px;
+            border: 1px solid #00d4ff;
+            background-color: #1a1f29;
+        }
+        QCheckBox::indicator:checked {
+            background-color: #00d4ff;
+        }
+    """)
+
     layout = QVBoxLayout()
     
-    # Dynamische Modell-Liste von Ollama abrufen
+    layout.addWidget(QLabel("Ollama Model Selection:"))
+    model_combo = QComboBox()
     try:
         local_models_resp = ollama.list()
         if hasattr(local_models_resp, 'models'):
             models = [m.model for m in local_models_resp.models]
         else:
             models = [m['name'] for m in local_models_resp.get('models', [])]
-    except Exception as e:
-        print(f"Fehler beim Abrufen der Ollama Modelle: {e}")
-        models = [current_model]
-
-    if not models:
+    except:
         models = [current_model]
     
-    layout.addWidget(QLabel("Ollama Modell auswählen:"))
-    model_combo = QComboBox()
     model_combo.addItems(sorted(list(set(models))))
     if current_model in models:
         model_combo.setCurrentText(current_model)
     layout.addWidget(model_combo)
     
-    save_btn = QPushButton("Speichern & Modell laden")
+    layout.addWidget(QLabel("System View Mode:"))
+    view_mode_combo = QComboBox()
+    view_mode_combo.addItems(["standard", "debug"])
+    view_mode_combo.setCurrentText(current_view_mode)
+    layout.addWidget(view_mode_combo)
+    
+    save_btn = QPushButton("APPLY CONFIGURATION")
     layout.addWidget(save_btn)
     
     settings = {}
     def save():
         settings['model'] = model_combo.currentText()
+        settings['view_mode'] = view_mode_combo.currentText()
         dialog.accept()
         
     save_btn.clicked.connect(save)
@@ -55,7 +106,7 @@ def manage_jarvis_gui(current_model):
     
     if settings:
         return json.dumps({"type": "config_update", "data": settings})
-    return "Keine Änderungen vorgenommen."
+    return "No changes applied."
 
 def update_config_direct(key, value):
     """Ermöglicht der KI, Einstellungen direkt per Befehl zu ändern."""
