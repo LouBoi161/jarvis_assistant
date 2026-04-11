@@ -10,12 +10,33 @@ from PyQt5.QtWidgets import QApplication, QInputDialog, QLineEdit, QComboBox, QV
 # Globale Variable für persistente Shell-Sitzung
 active_process = None
 
-def manage_jarvis_gui(current_model, current_view_mode="standard"):
-    """Öffnet ein modernes GUI-Fenster für die Jarvis-Konfiguration."""
+from multiprocessing import Process, Queue
+
+def _gui_worker(queue, func_name, *args, **kwargs):
+    """Interner Worker, der in einem eigenen Prozess läuft, um Qt-Threadsicherheit zu garantieren."""
     app = QApplication.instance()
     if app is None:
         app = QApplication(sys.argv)
-        
+    
+    if func_name == "manage_jarvis_gui":
+        result = _manage_jarvis_gui_logic(*args, **kwargs)
+    elif func_name == "get_gui_password":
+        result = _get_gui_password_logic(*args, **kwargs)
+    else:
+        result = None
+    
+    queue.put(result)
+
+def manage_jarvis_gui(current_model, current_view_mode="standard"):
+    """Öffnet das GUI-Fenster in einem sicheren Unterprozess."""
+    q = Queue()
+    p = Process(target=_gui_worker, args=(q, "manage_jarvis_gui", current_model, current_view_mode))
+    p.start()
+    p.join()
+    return q.get()
+
+def _manage_jarvis_gui_logic(current_model, current_view_mode="standard"):
+    """Die eigentliche Logik der Einstellungs-GUI."""
     dialog = QDialog()
     dialog.setWindowTitle("JARVIS System Control")
     dialog.setMinimumWidth(400)
@@ -41,9 +62,6 @@ def manage_jarvis_gui(current_model, current_view_mode="standard"):
             padding: 8px;
             font-size: 13px;
         }
-        QComboBox::drop-down {
-            border: none;
-        }
         QPushButton {
             background-color: #00d4ff;
             color: #0b0e14;
@@ -53,22 +71,9 @@ def manage_jarvis_gui(current_model, current_view_mode="standard"):
             font-weight: bold;
             margin-top: 20px;
         }
-        QPushButton:hover {
-            background-color: #00a3c7;
-        }
-        QCheckBox::indicator {
-            width: 18px;
-            height: 18px;
-            border: 1px solid #00d4ff;
-            background-color: #1a1f29;
-        }
-        QCheckBox::indicator:checked {
-            background-color: #00d4ff;
-        }
     """)
 
     layout = QVBoxLayout()
-    
     layout.addWidget(QLabel("Ollama Model Selection:"))
     model_combo = QComboBox()
     try:
@@ -108,25 +113,22 @@ def manage_jarvis_gui(current_model, current_view_mode="standard"):
         return json.dumps({"type": "config_update", "data": settings})
     return "No changes applied."
 
-def update_config_direct(key, value):
-    """Ermöglicht der KI, Einstellungen direkt per Befehl zu ändern."""
-    print(f"[Tool Execution] Update Config: {key} -> {value}")
-    return json.dumps({"type": "config_update", "data": {key: value}})
-
 def get_gui_password():
-    """Öffnet ein natives GUI-Fenster, um das sudo-Passwort vom User abzufragen."""
-    # Stelle sicher, dass eine QApplication existiert
-    app = QApplication.instance()
-    if app is None:
-        app = QApplication(sys.argv)
-        
+    """Öffnet die Passwort-Abfrage in einem sicheren Unterprozess."""
+    q = Queue()
+    p = Process(target=_gui_worker, args=(q, "get_gui_password"))
+    p.start()
+    p.join()
+    return q.get()
+
+def _get_gui_password_logic():
+    """Die eigentliche Logik der Passwort-Abfrage."""
     pwd, ok = QInputDialog.getText(
         None, 
         "Jarvis Sicherheit", 
         "Ein Programm (z.B. sudo/yay) fordert dein Passwort an:", 
         QLineEdit.Password
     )
-    
     if ok and pwd:
         return pwd
     return ""
