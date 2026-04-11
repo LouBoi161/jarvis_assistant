@@ -28,7 +28,7 @@ class JarvisAssistant:
         self.stt_model = whisper.load_model(WHISPER_MODEL)
         
         # TTSEngine das bereits geladene Whisper Modell mitgeben (spart RAM)
-        self.tts = TTSEngine(use_gpu=False, stt_model=self.stt_model)
+        self.tts = TTSEngine(use_gpu=True, stt_model=self.stt_model)
         
         self.history = []
         self.text_mode = False
