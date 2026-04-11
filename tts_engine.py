@@ -9,12 +9,10 @@ import re
 from qwen_tts import Qwen3TTSModel
 
 class TTSEngine:
-    def __init__(self, use_gpu=False, stt_model=None):
-        # Wir schalten GPU für TTS standardmäßig aus, da deine 12GB VRAM 
-        # bereits fast komplett von Ollama (Gemma 4) belegt sind.
-        # Das 0.6B Modell ist auf der CPU immer noch sehr schnell.
-        print("Lade Qwen3-TTS (0.6B Base) auf CPU...")
-        self.device = "cpu"
+    def __init__(self, use_gpu=True, stt_model=None):
+        # Wir nutzen jetzt die GPU, da wir den VRAM-Verbrauch von Ollama optimieren.
+        print("Lade Qwen3-TTS (0.6B Base) auf GPU (CUDA)...")
+        self.device = "cuda" if use_gpu and torch.cuda.is_available() else "cpu"
         
         try:
             self.model = Qwen3TTSModel.from_pretrained(
@@ -23,8 +21,8 @@ class TTSEngine:
                 dtype=torch.bfloat16
             )
         except Exception as e:
-            print(f"Fehler beim Laden von Qwen3: {e}. Nutze Fallback...")
-            # Falls bfloat16 auf deiner CPU nicht geht, versuche float32
+            print(f"Fehler beim Laden von Qwen3 auf GPU: {e}. Nutze CPU-Fallback...")
+            self.device = "cpu"
             self.model = Qwen3TTSModel.from_pretrained(
                 "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
                 device_map=self.device,
