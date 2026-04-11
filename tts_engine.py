@@ -196,14 +196,15 @@ class TTSEngine:
                 # Abspielen
                 wf = wave.open(file_path, 'rb')
                 stream = p.open(format=p.get_format_from_width(wf.getsampwidth()),
-                                channels=wf.getnchannels(), rate=wf.getframerate(), output=True)
+                                channels=wf.getnchannels(), rate=wf.getframerate(), output=True,
+                                frames_per_buffer=4096)
                 
-                data = wf.readframes(1024)
+                data = wf.readframes(4096)
                 while len(data) > 0:
                     if interrupt_event and interrupt_event.is_set():
                         break
                     stream.write(data)
-                    data = wf.readframes(1024)
+                    data = wf.readframes(4096)
                 
                 stream.stop_stream()
                 stream.close()
