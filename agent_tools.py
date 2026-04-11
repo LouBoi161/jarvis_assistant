@@ -179,12 +179,29 @@ def execute_command(command: str) -> str:
         except Exception as e:
             return f"Fehler beim Starten des interaktiven Befehls: {e}"
     else:
-        # Normale Desktop-Programme im Hintergrund starten
-        try:
-            subprocess.Popen(cmd_parts, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            return f"Befehl erfolgreich gestartet: {command} (läuft im Hintergrund)"
-        except Exception as e:
-            return f"Fehler bei der Ausführung: {e}"
+        # Prüfen, ob es ein grafisches Programm ist oder ein Konsolenbefehl
+        gui_apps = ["firefox", "code", "vlc", "nautilus", "virt-manager", "ptyxis", "gnome-terminal"]
+        is_gui = any(app in command.lower() for app in gui_apps)
+        
+        if is_gui:
+            try:
+                subprocess.Popen(cmd_parts, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                return f"Programm erfolgreich gestartet: {command} (läuft im Hintergrund)"
+            except Exception as e:
+                return f"Fehler beim Starten des Programms: {e}"
+        else:
+            # Normaler Konsolenbefehl: Output abfangen und zurückgeben
+            try:
+                result = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=30)
+                output = result.stdout.strip()
+                error = result.stderr.strip()
+                if output:
+                    return output
+                if error:
+                    return f"Fehler-Output: {error}"
+                return "Befehl wurde ohne Rückgabe ausgeführt."
+            except Exception as e:
+                return f"Fehler bei der Ausführung: {e}"
 
 def send_input(text: str) -> str:
     """Sendet Text an den wartenden Installer/Prozess im Terminal (z.B. 'y', '1', 'a')."""
