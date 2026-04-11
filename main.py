@@ -61,8 +61,10 @@ class JarvisAssistant:
         import re
         if self.view_mode == "standard":
             if level == "standard":
-                # Emotion-Tags entfernen (z.B. [freundlich])
-                clean_message = re.sub(r"\[[A-Za-zäöüß]+\]", "", message).strip()
+                # Alle Arten von Emotion-Tags entfernen ([freundlich] oder <EMOTION>...</EMOTION>)
+                clean_message = re.sub(r"\[[A-Za-zäöüß]+\]", "", message)
+                clean_message = re.sub(r"<EMOTION>.*?</EMOTION>", "", clean_message, flags=re.IGNORECASE)
+                clean_message = clean_message.strip()
                 if clean_message:
                     print(clean_message)
         else:

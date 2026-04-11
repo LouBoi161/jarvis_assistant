@@ -93,7 +93,8 @@ class TTSEngine:
             }
             instruction = tag_map.get(tag, instruction)
 
-        display_text = re.sub(r"\[[A-Za-zäöüß]+\]", "", text).strip()
+        display_text = re.sub(r"\[[A-Za-zäöüß]+\]", "", text)
+        display_text = re.sub(r"<EMOTION>.*?</EMOTION>", "", display_text, flags=re.IGNORECASE).strip()
         
         # --- TEXT NORMALISIERUNG FÜR TTS ---
         # 1. Uhrzeiten umwandeln (10:08 -> 10 Uhr 08), da Doppelpunkte oft Teile überspringen lassen
