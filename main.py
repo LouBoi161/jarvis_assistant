@@ -7,13 +7,17 @@ import ollama
 import numpy as np
 import threading
 import audio_capture
+import logging
 
 # Eigene Module
 from audio_capture import listen_for_wakeword, record_until_silence, save_wav
 from agent_tools import parse_and_execute_tool
 from tts_engine import TTSEngine
 
+# Warnungen und Logs unterdrücken
 warnings.filterwarnings("ignore")
+logging.getLogger("transformers").setLevel(logging.ERROR)
+logging.getLogger("httpx").setLevel(logging.ERROR) # Ollama nutzt httpx
 # Globale Standard-Konfiguration
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
 DEFAULT_MODEL = "gemma4:e4b"
