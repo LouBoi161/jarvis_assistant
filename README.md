@@ -63,11 +63,17 @@ git clone https://github.com/LouBoi161/jarvis_assistant.git
 cd jarvis_assistant
 
 # 2. Install uv (if you don't have it yet)
+# Arch Linux:
+sudo pacman -S uv
+
+# Other Linux (Universal script):
 curl -LsSf https://astral.sh/uv/install.sh | sh
+# NOTE: If using the script, you might need to restart your terminal 
+# or run 'source ~/.bashrc' (or ~/.zshrc) for the 'uv' command to work!
 
 # 3. Create a virtual environment
 uv venv
-
+```
 # 4. ACTIVATE the virtual environment (IMPORTANT!)
 # You must do this every time you open a new terminal!
 source .venv/bin/activate
