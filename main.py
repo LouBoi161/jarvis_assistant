@@ -28,6 +28,7 @@ class JarvisAssistant:
         # Standardmäßig debug, bis config geladen ist
         self.view_mode = "debug"
         self.ollama_model = None
+        self.security_mode = True
         
         # Konfiguration laden
         self.load_config()
@@ -83,12 +84,14 @@ class JarvisAssistant:
                     config = json.load(f)
                     self.ollama_model = config.get("ollama_model")
                     self.view_mode = config.get("view_mode", "standard")
-                    self.log(f"Konfiguration geladen. Modell: {self.ollama_model}, Mode: {self.view_mode}", "debug")
+                    self.security_mode = config.get("security_mode", True)
+                    self.log(f"Konfiguration geladen. Modell: {self.ollama_model}, Mode: {self.view_mode}, Security: {self.security_mode}", "debug")
                     return
             except Exception as e:
                 self.log(f"Fehler beim Laden der Config: {e}", "debug")
         self.ollama_model = None
         self.view_mode = "standard"
+        self.security_mode = True
 
     def open_settings(self):
         """Öffnet die GUI-Einstellungen zur Modellauswahl."""
@@ -97,7 +100,8 @@ class JarvisAssistant:
             "tool": "manage_jarvis_gui", 
             "kwargs": {
                 "current_model": self.ollama_model or "Wähle ein Modell...",
-                "current_view_mode": self.view_mode
+                "current_view_mode": self.view_mode,
+                "security_mode": self.security_mode
             }
         }))
         if res.startswith('{"type": "config_update"'):
@@ -106,8 +110,10 @@ class JarvisAssistant:
                 self.ollama_model = new_data["model"]
             if "view_mode" in new_data:
                 self.view_mode = new_data["view_mode"]
+            if "security_mode" in new_data:
+                self.security_mode = new_data["security_mode"]
             self.save_config()
-            self.log(f"Einstellungen übernommen: {self.ollama_model} ({self.view_mode})", "standard")
+            self.log(f"Einstellungen übernommen: {self.ollama_model} ({self.view_mode}, Security: {self.security_mode})", "standard")
         
         if not self.ollama_model:
             self.log("Kein Modell ausgewählt. Jarvis kann nicht starten.", "standard")
@@ -118,7 +124,8 @@ class JarvisAssistant:
         try:
             config = {
                 "ollama_model": self.ollama_model,
-                "view_mode": self.view_mode
+                "view_mode": self.view_mode,
+                "security_mode": self.security_mode
             }
             with open(CONFIG_FILE, "w") as f:
                 json.dump(config, f, indent=4)
@@ -228,6 +235,16 @@ class JarvisAssistant:
             if self.handle_slash_commands(user_text):
                 return
 
+        security_info = ""
+        if self.security_mode:
+            security_info = (
+                "\nSICHERHEITSMODUS: AKTIVIERT. Du kannst aktuell KEINE Systembefehle (execute_command) ausführen. "
+                "Wenn du es versuchst, erhältst du eine Fehlermeldung. Du darfst aber jederzeit im Web suchen (search_web). "
+                "Sag dem Nutzer bei Bedarf, dass er den Sicherheitsmodus in den Einstellungen (/settings) deaktivieren kann."
+            )
+        else:
+            security_info = "\nSICHERHEITSMODUS: DEAKTIVIERT. Du hast vollen Zugriff auf das System und kannst Befehle ausführen."
+
         sys_prompt = (
             "Du bist Jarvis, ein autonomer, hochintelligenter KI-Agent.\n"
             "SPRACHE: Antworte IMMER auf DEUTSCH. Verfalle niemals ins Englische.\n\n"
@@ -241,6 +258,7 @@ class JarvisAssistant:
             "2. JSON-TRENNUNG: Schreibe dein Werkzeug-JSON immer ganz am Ende deiner Antwort.\n"
             "3. PROAKTIVITÄT: Suche erst Infos (cat /etc/os-release), dann handle.\n"
             "4. KURZHEIT: Sei präzise und professionell."
+            f"{security_info}"
         )
         
         if not self.history:

@@ -5,10 +5,22 @@ import pexpect
 import shutil
 import sys
 import ollama
-from PyQt5.QtWidgets import QApplication, QInputDialog, QLineEdit, QComboBox, QVBoxLayout, QDialog, QPushButton, QLabel
+import os
+from PyQt5.QtWidgets import QApplication, QInputDialog, QLineEdit, QComboBox, QVBoxLayout, QDialog, QPushButton, QLabel, QCheckBox
 
 # Globale Variable für persistente Shell-Sitzung
 active_process = None
+CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
+
+def get_security_mode():
+    """Liest den Sicherheitsmodus direkt aus der Config."""
+    try:
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE, "r") as f:
+                return json.load(f).get("security_mode", True)
+    except:
+        pass
+    return True
 
 from multiprocessing import Process, Queue
 
@@ -27,15 +39,15 @@ def _gui_worker(queue, func_name, *args, **kwargs):
     
     queue.put(result)
 
-def manage_jarvis_gui(current_model, current_view_mode="standard"):
+def manage_jarvis_gui(current_model, current_view_mode="standard", security_mode=True):
     """Öffnet das GUI-Fenster in einem sicheren Unterprozess."""
     q = Queue()
-    p = Process(target=_gui_worker, args=(q, "manage_jarvis_gui", current_model, current_view_mode))
+    p = Process(target=_gui_worker, args=(q, "manage_jarvis_gui", current_model, current_view_mode, security_mode))
     p.start()
     p.join()
     return q.get()
 
-def _manage_jarvis_gui_logic(current_model, current_view_mode="standard"):
+def _manage_jarvis_gui_logic(current_model, current_view_mode="standard", security_mode=True):
     """Die eigentliche Logik der Einstellungs-GUI."""
     dialog = QDialog()
     dialog.setWindowTitle("JARVIS System Control")
@@ -96,6 +108,11 @@ def _manage_jarvis_gui_logic(current_model, current_view_mode="standard"):
     view_mode_combo.setCurrentText(current_view_mode)
     layout.addWidget(view_mode_combo)
     
+    layout.addWidget(QLabel("Security Settings:"))
+    security_checkbox = QCheckBox("Security Mode (Commands Blocked)")
+    security_checkbox.setChecked(security_mode)
+    layout.addWidget(security_checkbox)
+    
     save_btn = QPushButton("APPLY CONFIGURATION")
     layout.addWidget(save_btn)
     
@@ -103,6 +120,7 @@ def _manage_jarvis_gui_logic(current_model, current_view_mode="standard"):
     def save():
         settings['model'] = model_combo.currentText()
         settings['view_mode'] = view_mode_combo.currentText()
+        settings['security_mode'] = security_checkbox.isChecked()
         dialog.accept()
         
     save_btn.clicked.connect(save)
@@ -153,6 +171,11 @@ def search_web(query: str, max_results: int = 3) -> str:
 def execute_command(command: str) -> str:
     """Führt einen Linux-Systembefehl aus."""
     global active_process
+    
+    if get_security_mode():
+        print(f"[Tool Execution] BLOCKIERT (Sicherheitsmodus): '{command}'")
+        return "FEHLER: Der Sicherheitsmodus ist AKTIVIERT. Jarvis darf aktuell KEINE Systembefehle ausführen. Der Nutzer muss diesen erst in den Einstellungen (/settings) deaktivieren."
+
     print(f"[Tool Execution] Führe Befehl aus: '{command}'")
     
     blocked_keywords = ["rm -rf /", "mkfs", "dd "]
@@ -206,6 +229,10 @@ def execute_command(command: str) -> str:
 def send_input(text: str) -> str:
     """Sendet Text an den wartenden Installer/Prozess im Terminal (z.B. 'y', '1', 'a')."""
     global active_process
+    
+    if get_security_mode():
+        return "FEHLER: Der Sicherheitsmodus ist AKTIVIERT. Eingaben ins Terminal sind blockiert."
+
     print(f"[Tool Execution] Sende Eingabe an Terminal: '{text}'")
     if not active_process or not active_process.isalive():
         return "Fehler: Es läuft aktuell kein interaktiver Befehl, der auf Eingaben wartet."
@@ -243,6 +270,10 @@ def read_process_output() -> str:
             full_output += output_chunk
             
             if index == 0 or index == 1: # Passwort prompt
+                if get_security_mode():
+                    active_process.sendline("\x03")
+                    return full_output + "\n[System: Sicherheitsmodus AKTIVIERT - Passwort-Eingabe blockiert]"
+
                 print("[System]: Passwort-Anfrage erkannt. Öffne GUI-Fenster...")
                 pwd = get_gui_password()
                 if pwd:
@@ -286,9 +317,11 @@ def parse_and_execute_tool(json_string: str) -> str:
         elif tool_name == "send_input":
             return send_input(**kwargs)
         elif tool_name == "manage_jarvis_gui":
-            return manage_jarvis_gui(kwargs.get("current_model"))
-        elif tool_name == "update_config_direct":
-            return update_config_direct(kwargs.get("key"), kwargs.get("value"))
+            return manage_jarvis_gui(
+                kwargs.get("current_model"), 
+                kwargs.get("current_view_mode", "standard"),
+                kwargs.get("security_mode", True)
+            )
         else:
             return f"Unbekanntes Tool: {tool_name}"
     except json.JSONDecodeError:
