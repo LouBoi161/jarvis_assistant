@@ -25,23 +25,27 @@ A local, intelligent, and professional AI voice assistant for Linux, powered by 
 
 ## Requirements & Installation
 
-### 1. System Dependencies
-JARVIS requires some system-level libraries for audio processing and speech recognition.
+### 1. System Dependencies & uv
+JARVIS requires some system-level libraries and **uv** for managing the Python environment.
 
 **Arch Linux:**
 ```bash
-sudo pacman -S portaudio ffmpeg
+sudo pacman -S portaudio ffmpeg uv
 ```
 
 **Ubuntu/Debian:**
 ```bash
 sudo apt update
 sudo apt install portaudio19-dev ffmpeg
+# Install uv via script (if not already installed)
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
 **Fedora:**
 ```bash
 sudo dnf install portaudio-devel ffmpeg
+# Install uv via script (if not already installed)
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
 ### 2. Install Ollama
@@ -55,30 +59,21 @@ ollama pull gemma4:e4b
 ```
 
 ### 3. Python Setup
-We recommend using a virtual environment and **uv** for lightning-fast dependency installation.
+We recommend using **uv** for lightning-fast dependency installation.
 
 ```bash
 # 1. Clone the repository
 git clone https://github.com/LouBoi161/jarvis_assistant.git
 cd jarvis_assistant
 
-# 2. Install uv (if you don't have it yet)
-# Arch Linux:
-sudo pacman -S uv
-
-# Other Linux (Universal script):
-curl -LsSf https://astral.sh/uv/install.sh | sh
-# NOTE: If using the script, you might need to restart your terminal 
-# or run 'source ~/.bashrc' (or ~/.zshrc) for the 'uv' command to work!
-
-# 3. Create a virtual environment
+# 2. Create a virtual environment
 uv venv
-```
-# 4. ACTIVATE the virtual environment (IMPORTANT!)
+
+# 3. ACTIVATE the virtual environment (IMPORTANT!)
 # You must do this every time you open a new terminal!
 source .venv/bin/activate
 
-# 5. Install all requirements
+# 4. Install all requirements
 uv pip install -r requirements.txt
 ```
 
