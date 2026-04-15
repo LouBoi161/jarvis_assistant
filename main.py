@@ -294,63 +294,41 @@ class JarvisAssistant:
         if target_lang == "en":
             security_info = ""
             if self.security_mode:
-                security_info = (
-                    "\nSECURITY MODE: ENABLED. You currently CANNOT execute system commands (execute_command). "
-                    "If you try, you will get an error message. You can search the web at any time (search_web). "
-                    "If needed, tell the user to disable security mode in the settings (/settings)."
-                )
+                security_info = "\nSECURITY: ENABLED. execute_command is BLOCKED. Use search_web only."
             else:
-                security_info = (
-                    "\nSECURITY MODE: DISABLED. You have FULL ACCESS to the user's Linux system. "
-                    "You CAN and SHOULD execute system commands (execute_command) to open programs, browsers (e.g., 'firefox <url>'), "
-                    "files, or change settings. Do NOT claim you cannot access the system. You ARE the system interface."
-                )
+                security_info = "\nSECURITY: DISABLED. You have FULL SYSTEM ACCESS. Use execute_command for any OS task (opening apps, browsers, files)."
 
             sys_prompt = (
-                "You are Jarvis, an autonomous, highly intelligent AI agent with local system access.\n"
-                "LANGUAGE: Always respond in ENGLISH.\n\n"
-                "INTERNAL THOUGHTS:\n"
-                "Use `<thought>...</thought>` for your planning. This area is strictly confidential.\n\n"
-                "TOOLS (JSON ONLY AT THE END):\n"
+                "You are Jarvis, a proactive AI assistant. You have local system access via tools.\n"
+                f"{security_info}\n\n"
+                "TOOLS (USE JSON AT THE END):\n"
                 "{ \"tool\": \"search_web\", \"kwargs\": { \"query\": \"...\" } }\n"
                 "{ \"tool\": \"execute_command\", \"kwargs\": { \"command\": \"...\" } }\n\n"
-                "IMPORTANT RULES:\n"
-                "1. NO META-TALK: Do not describe what the user is doing. Speak directly TO the user.\n"
-                "2. JSON SEPARATION: Always write your tool JSON at the very end of your response.\n"
-                "3. RESEARCH FIRST: If you are unsure about a name, a URL, or a command, use search_web first to verify the correct information. Only use execute_command once you are certain. NEVER ASK the user for URLs or information you can find yourself via search_web.\n"
-                "4. AUTONOMY: Be proactive. Do not ask for permission to use tools. Do not ask for information that a search engine can provide."
-                f"{security_info}"
+                "RULES:\n"
+                "1. If you need info (URLs, names), use search_web IMMEDIATELY. Do not ask the user.\n"
+                "2. If you need to open/do something, use execute_command (e.g., 'firefox <url>').\n"
+                "3. Always provide the JSON tool call if an action is required.\n"
+                "4. Be brief. Respond in ENGLISH."
             )
         else:
             # Standard: Deutsch
             security_info = ""
             if self.security_mode:
-                security_info = (
-                    "\nSICHERHEITSMODUS: AKTIVIERT. Du kannst aktuell KEINE Systembefehle (execute_command) ausführen. "
-                    "Wenn du es versuchst, erhältst du eine Fehlermeldung. Du darfst aber jederzeit im Web suchen (search_web). "
-                    "Sag dem Nutzer bei Bedarf, dass er den Sicherheitsmodus in den Einstellungen (/settings) deaktivieren kann."
-                )
+                security_info = "\nSICHERHEIT: AKTIVIERT. execute_command ist BLOCKIERT. Nutze nur search_web."
             else:
-                security_info = (
-                    "\nSICHERHEITSMODUS: DEAKTIVIERT. Du hast VOLLEN ZUGRIFF auf das Linux-System des Nutzers. "
-                    "Du KANNST und SOLLST Systembefehle (execute_command) nutzen, um Programme zu öffnen, Browser zu starten (z.B. 'firefox <url>'), "
-                    "Dateien zu verwalten oder Systemeinstellungen zu ändern. Behaupte NIEMALS, dass du keinen Zugriff hättest. Du BIST die Schnittstelle zum System."
-                )
+                security_info = "\nSICHERHEIT: DEAKTIVIERT. Du hast VOLLZUGRIFF. Nutze execute_command für alle Systemaufgaben (Apps/Browser öffnen, Dateien)."
 
             sys_prompt = (
-                "Du bist Jarvis, ein autonomer, hochintelligenter KI-Agent mit lokalem Systemzugriff.\n"
-                "SPRACHE: Antworte auf DEUTSCH.\n\n"
-                "INTERNES DENKEN:\n"
-                "Nutze `<thought>...</thought>` für deine Planung. Dieser Bereich ist streng geheim.\n\n"
-                "WERKZEUGE (NUR JSON AM ENDE):\n"
+                "Du bist Jarvis, ein proaktiver KI-Assistent. Du hast Systemzugriff über Werkzeuge.\n"
+                f"{security_info}\n\n"
+                "WERKZEUGE (JSON AM ENDE NUTZEN):\n"
                 "{ \"tool\": \"search_web\", \"kwargs\": { \"query\": \"...\" } }\n"
                 "{ \"tool\": \"execute_command\", \"kwargs\": { \"command\": \"...\" } }\n\n"
-                "WICHTIGE REGELN:\n"
-                "1. KEIN META-TALK: Beschreibe nicht, was der Nutzer tut. Sprich direkt MIT dem Nutzer.\n"
-                "2. JSON-TRENNUNG: Schreibe dein Werkzeug-JSON immer ganz am Ende deiner Antwort.\n"
-                "3. ERST RECHERCHIEREN: Wenn du dir bei einem Namen, einer URL oder einem Befehl unsicher bist, nutze erst search_web, um die korrekten Informationen zu finden. Nutze erst danach execute_command. FRAGE NIEMALS den Nutzer nach Informationen, die du selbst per search_web finden kannst.\n"
-                "4. AUTONOMIE: Sei proaktiv. Frage nicht um Erlaubnis, Werkzeuge zu nutzen. Frage nicht nach Informationen, die eine Suchmaschine liefern kann."
-                f"{security_info}"
+                "REGELN:\n"
+                "1. Wenn du Infos brauchst (URLs, Namen), nutze SOFORT search_web. Frage nicht den Nutzer.\n"
+                "2. Um etwas zu öffnen/tun, nutze execute_command (z.B. 'firefox <url>').\n"
+                "3. Gib IMMER den JSON-Tool-Call aus, wenn eine Aktion nötig ist.\n"
+                "4. Sei kurz. Antworte auf DEUTSCH."
             )
         
         if not self.history:
