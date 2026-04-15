@@ -28,6 +28,8 @@ class JarvisAssistant:
         self.view_mode = "standard"
         self.ollama_model = None
         self.security_mode = True
+        self.language = "de"
+        self.last_detected_lang = "de"
         self.tts_type = "qwen3-tts"
         self.piper_voice = "de_DE-thorsten-high"
         self.qwen_voice = "default.wav"
@@ -95,6 +97,7 @@ class JarvisAssistant:
                     self.ollama_model = config.get("ollama_model")
                     self.view_mode = config.get("view_mode", "standard")
                     self.security_mode = config.get("security_mode", True)
+                    self.language = config.get("language", "de")
                     self.tts_type = config.get("tts_type", "qwen3-tts")
                     self.piper_voice = config.get("piper_voice", "de_DE-thorsten-high")
                     self.qwen_voice = config.get("qwen_voice", "default.wav")
@@ -105,6 +108,7 @@ class JarvisAssistant:
         self.ollama_model = None
         self.view_mode = "standard"
         self.security_mode = True
+        self.language = "de"
 
     def open_settings(self):
         """Öffnet die GUI-Einstellungen."""
@@ -115,6 +119,7 @@ class JarvisAssistant:
                 "ollama_model": self.ollama_model or "Wähle ein Modell...",
                 "view_mode": self.view_mode,
                 "security_mode": self.security_mode,
+                "language": self.language,
                 "tts_type": self.tts_type,
                 "piper_voice": self.piper_voice,
                 "qwen_voice": self.qwen_voice
@@ -125,6 +130,7 @@ class JarvisAssistant:
             self.ollama_model = new_data.get("ollama_model", self.ollama_model)
             self.view_mode = new_data.get("view_mode", self.view_mode)
             self.security_mode = new_data.get("security_mode", self.security_mode)
+            self.language = new_data.get("language", self.language)
             
             old_tts_type = self.tts_type
             old_piper_voice = self.piper_voice
@@ -158,6 +164,7 @@ class JarvisAssistant:
                 "ollama_model": self.ollama_model,
                 "view_mode": self.view_mode,
                 "security_mode": self.security_mode,
+                "language": self.language,
                 "tts_type": self.tts_type,
                 "piper_voice": self.piper_voice,
                 "qwen_voice": self.qwen_voice
@@ -190,6 +197,8 @@ class JarvisAssistant:
         text = result["text"].strip()
         if text:
             detected_lang = result.get("language", "unknown")
+            if detected_lang != "unknown":
+                self.last_detected_lang = detected_lang
             self.log(f"Du ({detected_lang}): {text}", "standard")
         return text
 
@@ -268,34 +277,70 @@ class JarvisAssistant:
             if self.handle_slash_commands(user_text):
                 return
 
-        security_info = ""
-        if self.security_mode:
-            security_info = (
-                "\nSICHERHEITSMODUS: AKTIVIERT. Du kannst aktuell KEINE Systembefehle (execute_command) ausführen. "
-                "Wenn du es versuchst, erhältst du eine Fehlermeldung. Du darfst aber jederzeit im Web suchen (search_web). "
-                "Sag dem Nutzer bei Bedarf, dass er den Sicherheitsmodus in den Einstellungen (/settings) deaktivieren kann."
+        # Sprach-Logik für den System-Prompt
+        target_lang = self.language
+        if target_lang == "auto":
+            target_lang = self.last_detected_lang
+
+        if target_lang == "en":
+            security_info = ""
+            if self.security_mode:
+                security_info = (
+                    "\nSECURITY MODE: ENABLED. You currently CANNOT execute system commands (execute_command). "
+                    "If you try, you will get an error message. You can search the web at any time (search_web). "
+                    "If needed, tell the user to disable security mode in the settings (/settings)."
+                )
+            else:
+                security_info = "\nSECURITY MODE: DISABLED. You have full system access and can execute commands."
+
+            sys_prompt = (
+                "You are Jarvis, an autonomous, highly intelligent AI agent.\n"
+                "LANGUAGE: Always respond in ENGLISH.\n\n"
+                "INTERNAL THOUGHTS:\n"
+                "Use `<thought>...</thought>` for your planning. This area is strictly confidential.\n\n"
+                "TOOLS (JSON ONLY AT THE END):\n"
+                "{ \"tool\": \"search_web\", \"kwargs\": { \"query\": \"...\" } }\n"
+                "{ \"tool\": \"execute_command\", \"kwargs\": { \"command\": \"...\" } }\n\n"
+                "IMPORTANT RULES:\n"
+                "1. NO META-TALK: Do not describe what the user is doing. Speak directly TO the user.\n"
+                "2. JSON SEPARATION: Always write your tool JSON at the very end of your response.\n"
+                "3. PROACTIVITY: First search for info (cat /etc/os-release), then act.\n"
+                "4. BREVITY: Be precise and professional."
+                f"{security_info}"
             )
         else:
-            security_info = "\nSICHERHEITSMODUS: DEAKTIVIERT. Du hast vollen Zugriff auf das System und kannst Befehle ausführen."
+            # Standard: Deutsch
+            security_info = ""
+            if self.security_mode:
+                security_info = (
+                    "\nSICHERHEITSMODUS: AKTIVIERT. Du kannst aktuell KEINE Systembefehle (execute_command) ausführen. "
+                    "Wenn du es versuchst, erhältst du eine Fehlermeldung. Du darfst aber jederzeit im Web suchen (search_web). "
+                    "Sag dem Nutzer bei Bedarf, dass er den Sicherheitsmodus in den Einstellungen (/settings) deaktivieren kann."
+                )
+            else:
+                security_info = "\nSICHERHEITSMODUS: DEAKTIVIERT. Du hast vollen Zugriff auf das System und kannst Befehle ausführen."
 
-        sys_prompt = (
-            "Du bist Jarvis, ein autonomer, hochintelligenter KI-Agent.\n"
-            "SPRACHE: Antworte bevorzugt auf DEUTSCH. Wenn der Nutzer dich auf Englisch anspricht, antworte auf ENGLISCH.\n\n"
-            "INTERNES DENKEN:\n"
-            "Nutze `<thought>...</thought>` für deine Planung. Dieser Bereich ist streng geheim.\n\n"
-            "WERKZEUGE (NUR JSON AM ENDE):\n"
-            "{ \"tool\": \"search_web\", \"kwargs\": { \"query\": \"...\" } }\n"
-            "{ \"tool\": \"execute_command\", \"kwargs\": { \"command\": \"...\" } }\n\n"
-            "WICHTIGE REGELN:\n"
-            "1. KEIN META-TALK: Beschreibe nicht, was der Nutzer tut. Sprich direkt MIT dem Nutzer.\n"
-            "2. JSON-TRENNUNG: Schreibe dein Werkzeug-JSON immer ganz am Ende deiner Antwort.\n"
-            "3. PROAKTIVITÄT: Suche erst Infos (cat /etc/os-release), dann handle.\n"
-            "4. KURZHEIT: Sei präzise und professionell."
-            f"{security_info}"
-        )
+            sys_prompt = (
+                "Du bist Jarvis, ein autonomer, hochintelligenter KI-Agent.\n"
+                "SPRACHE: Antworte auf DEUTSCH.\n\n"
+                "INTERNES DENKEN:\n"
+                "Nutze `<thought>...</thought>` für deine Planung. Dieser Bereich ist streng geheim.\n\n"
+                "WERKZEUGE (NUR JSON AM ENDE):\n"
+                "{ \"tool\": \"search_web\", \"kwargs\": { \"query\": \"...\" } }\n"
+                "{ \"tool\": \"execute_command\", \"kwargs\": { \"command\": \"...\" } }\n\n"
+                "WICHTIGE REGELN:\n"
+                "1. KEIN META-TALK: Beschreibe nicht, was der Nutzer tut. Sprich direkt MIT dem Nutzer.\n"
+                "2. JSON-TRENNUNG: Schreibe dein Werkzeug-JSON immer ganz am Ende deiner Antwort.\n"
+                "3. PROAKTIVITÄT: Suche erst Infos (cat /etc/os-release), dann handle.\n"
+                "4. KURZHEIT: Sei präzise und professionell."
+                f"{security_info}"
+            )
         
         if not self.history:
             self.history.append({"role": "system", "content": sys_prompt})
+        else:
+            # System prompt aktualisieren, falls sich die Sprache geändert hat
+            self.history[0] = {"role": "system", "content": sys_prompt}
             
         self.history.append({"role": "user", "content": user_text})
         

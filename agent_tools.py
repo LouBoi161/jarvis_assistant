@@ -105,12 +105,19 @@ def _manage_jarvis_gui_logic(config):
         model_combo.setCurrentText(config.get("ollama_model"))
     layout.addWidget(model_combo)
     
-    # View Mode
+    # System View Mode
     layout.addWidget(QLabel("System View Mode:"))
     view_mode_combo = QComboBox()
     view_mode_combo.addItems(["standard", "debug"])
     view_mode_combo.setCurrentText(config.get("view_mode", "standard"))
     layout.addWidget(view_mode_combo)
+
+    # Assistant Language
+    layout.addWidget(QLabel("Assistant Language:"))
+    lang_combo = QComboBox()
+    lang_combo.addItems(["de", "en", "auto"])
+    lang_combo.setCurrentText(config.get("language", "de"))
+    layout.addWidget(lang_combo)
 
     # TTS Type
     layout.addWidget(QLabel("TTS Engine:"))
@@ -184,6 +191,7 @@ def _manage_jarvis_gui_logic(config):
     def save():
         new_config['ollama_model'] = model_combo.currentText()
         new_config['view_mode'] = view_mode_combo.currentText()
+        new_config['language'] = lang_combo.currentText()
         new_config['security_mode'] = security_checkbox.isChecked()
         new_config['tts_type'] = tts_combo.currentText()
         new_config['piper_voice'] = piper_combo.currentText()
