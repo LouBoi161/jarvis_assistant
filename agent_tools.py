@@ -123,12 +123,13 @@ def _manage_jarvis_gui_logic(config):
     piper_label = QLabel("Piper Voice (name-lang-quality):")
     layout.addWidget(piper_label)
     piper_combo = QComboBox()
-    # Hier könnten wir piper --list-voices parsen, aber wir nutzen eine Liste der gängigen deutschen Stimmen
+    # Hier könnten wir piper --list-voices parsen, aber wir nutzen eine Liste der gängigen Stimmen
     piper_voices = [
         "de_DE-thorsten-high",
-        "de_DE-thorsten-medium",
-        "de_DE-thorsten_emotional-medium",
-        "de_DE-pavoque-low"
+        "de_DE-ramona-low",
+        "en_US-lessac-high",
+        "en_US-amy-medium",
+        "de_DE-thorsten_emotional-medium"
     ]
     piper_combo.addItems(piper_voices)
     piper_combo.setEditable(True)
