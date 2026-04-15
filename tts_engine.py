@@ -25,6 +25,12 @@ class TTSEngine:
         self.voice_clone_prompt = None
         self.ref_wav = None
         self.ref_text = ""
+        
+        # Path to local piper binary in .venv
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        self.piper_binary = os.path.join(script_dir, ".venv", "bin", "piper")
+        if not os.path.exists(self.piper_binary):
+            self.piper_binary = "piper" # Fallback to PATH
 
         if self.tts_type == "qwen3-tts":
             self._init_qwen()
@@ -76,7 +82,6 @@ class TTSEngine:
                 print(f"Warning: Could not pre-calculate voice clone prompt: {e}")
 
     def _init_piper(self):
-        # Piper assumes piper-tts is installed or available in PATH
         print(f"Using Piper TTS with voice: {self.piper_voice}")
         pass
 
@@ -150,14 +155,12 @@ class TTSEngine:
         self._play_audio_queue(audio_queue, interrupt_event)
 
     def _speak_piper(self, text, interrupt_event):
-        # Simplified Piper execution via subprocess for speed
         output_file = f"piper_temp_{threading.get_ident()}.wav"
         try:
-            # piper -m voice.onnx -c voice.onnx.json --output_file ...
-            # We assume piper is in PATH or installed.
-            # Example command: echo "Text" | piper --model ... --output_file ...
+            # Check if model exists, piper will auto-download if name is provided
+            # Piper command: piper --model <name_or_path> --output_file <path>
             process = subprocess.Popen(
-                ["piper", "--model", self.piper_voice, "--output_file", output_file],
+                [self.piper_binary, "--model", self.piper_voice, "--output_file", output_file],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL

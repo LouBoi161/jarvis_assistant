@@ -11,3 +11,4 @@ librosa
 PyQt5
 pexpect
 soundfile
+piper-tts
