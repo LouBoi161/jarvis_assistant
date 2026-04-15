@@ -141,6 +141,8 @@ class JarvisAssistant:
                 old_piper_voice != self.piper_voice or 
                 old_qwen_voice != self.qwen_voice):
                 self.log("TTS-Einstellungen geändert. Initialisiere neu...", "standard")
+                if hasattr(self, 'tts'):
+                    self.tts.unload_models()
                 self.init_tts()
             
             self.log(f"Einstellungen übernommen.", "standard")

@@ -10,7 +10,14 @@ import threading
 import queue
 import time
 import subprocess
-from qwen_tts import Qwen3TTSModel
+import urllib.request
+import gc
+
+# Check if qwen-tts is available, but don't fail here
+try:
+    from qwen_tts import Qwen3TTSModel
+except ImportError:
+    Qwen3TTSModel = None
 
 class TTSEngine:
     def __init__(self, config=None, use_gpu=True, stt_model=None):
@@ -19,28 +26,51 @@ class TTSEngine:
         self.piper_voice = self.config.get("piper_voice", "de_DE-thorsten-high")
         self.qwen_voice = self.config.get("qwen_voice", "default.wav")
         self.stt_model = stt_model
+        self.use_gpu = use_gpu
         self.device = "cuda" if use_gpu and torch.cuda.is_available() else "cpu"
         
-        self.model = None
+        self.model = None # Qwen model
         self.voice_clone_prompt = None
         self.ref_wav = None
         self.ref_text = ""
         
-        # Path to local piper binary in .venv
+        # Piper paths
         script_dir = os.path.dirname(os.path.abspath(__file__))
+        self.piper_dir = os.path.join(script_dir, "piper_models")
+        if not os.path.exists(self.piper_dir):
+            os.makedirs(self.piper_dir)
+            
         self.piper_binary = os.path.join(script_dir, ".venv", "bin", "piper")
         if not os.path.exists(self.piper_binary):
             self.piper_binary = "piper" # Fallback to PATH
 
-        if self.tts_type == "qwen3-tts":
-            self._init_qwen()
-        elif self.tts_type == "piper-tts":
-            self._init_piper()
-        
-        print(f"TTS Engine initialized with type: {self.tts_type}")
+        # Lazy loading: Don't load anything in __init__ if not needed
+        # only if tts_type is not "none", we might want to pre-load, 
+        # but to save RAM we wait for the first 'speak' call.
+        print(f"TTS Engine initialized (Lazy). Type: {self.tts_type}")
 
-    def _init_qwen(self):
-        print("Lade Qwen3-TTS (0.6B Base)...")
+    def unload_models(self):
+        """Unloads all models from memory/VRAM."""
+        print("Unloading TTS models to save memory...")
+        if self.model is not None:
+            del self.model
+            self.model = None
+        
+        self.voice_clone_prompt = None
+        
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        gc.collect()
+
+    def _ensure_qwen_loaded(self):
+        if self.model is not None:
+            return
+        
+        if Qwen3TTSModel is None:
+            print("Error: qwen-tts package not installed.")
+            return
+
+        print(f"Loading Qwen3-TTS on {self.device}...")
         try:
             self.model = Qwen3TTSModel.from_pretrained(
                 "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
@@ -48,14 +78,15 @@ class TTSEngine:
                 dtype=torch.bfloat16 if self.device == "cuda" else torch.float32
             )
         except Exception as e:
-            print(f"Fehler beim Laden von Qwen3: {e}. Nutze CPU-Fallback...")
+            print(f"Qwen loading failed: {e}. Falling back to CPU.")
             self.device = "cpu"
             self.model = Qwen3TTSModel.from_pretrained(
                 "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
                 device_map=self.device,
                 dtype=torch.float32
             )
-        
+
+        # Prepare reference voice for cloning
         if not self.stt_model:
             self.stt_model = whisper.load_model("base")
         
@@ -69,9 +100,11 @@ class TTSEngine:
                 with open(ref_txt_file, "r") as f:
                     self.ref_text = f.read().strip()
             else:
-                print(f"Analyzing {self.qwen_voice} automatically...")
+                print(f"Analyzing reference voice {self.qwen_voice}...")
                 result = self.stt_model.transcribe(self.ref_wav)
                 self.ref_text = result["text"].strip()
+                with open(ref_txt_file, "w") as f:
+                    f.write(self.ref_text)
             
             try:
                 self.voice_clone_prompt = self.model.create_voice_clone_prompt(
@@ -79,16 +112,43 @@ class TTSEngine:
                     ref_text=self.ref_text
                 )
             except Exception as e:
-                print(f"Warning: Could not pre-calculate voice clone prompt: {e}")
+                print(f"Voice clone prompt error: {e}")
 
-    def _init_piper(self):
-        print(f"Using Piper TTS with voice: {self.piper_voice}")
-        pass
+    def _ensure_piper_loaded(self):
+        """Ensures the piper model and config are downloaded."""
+        model_path = os.path.join(self.piper_dir, f"{self.piper_voice}.onnx")
+        config_path = os.path.join(self.piper_dir, f"{self.piper_voice}.onnx.json")
+        
+        if not os.path.exists(model_path) or not os.path.exists(config_path):
+            print(f"Piper model {self.piper_voice} not found. Downloading...")
+            base_url = "https://huggingface.co/rhasspy/piper-voices/resolve/main"
+            
+            # Construct download URL (this is a heuristic for piper's repo structure)
+            lang_code = self.piper_voice.split('-')[0]
+            country_code = self.piper_voice.split('-')[1]
+            voice_name = self.piper_voice.split('-')[2]
+            quality = self.piper_voice.split('-')[3]
+            
+            # Example: de/de_DE/thorsten/high/de_DE-thorsten-high.onnx
+            repo_path = f"{lang_code}/{lang_code}_{country_code.upper()}/{voice_name}/{quality}/{self.piper_voice}.onnx"
+            
+            try:
+                print(f"Downloading from {base_url}/{repo_path}...")
+                urllib.request.urlretrieve(f"{base_url}/{repo_path}", model_path)
+                urllib.request.urlretrieve(f"{base_url}/{repo_path}.json", config_path)
+                print("Download complete.")
+            except Exception as e:
+                print(f"Download failed: {e}")
+                # Fallback to a simpler structure if needed or report error
+                return False
+        return True
 
     def speak(self, text: str, interrupt_event=None):
         if not text.strip() or self.tts_type == "none":
+            self.unload_models() # Ensure memory is free if TTS is disabled
             return
 
+        # Prepare text (remove tags, format time, etc.)
         display_text = re.sub(r"\[[A-Za-zäöüß ]+\]", "", text)
         display_text = re.sub(r"<[^>]+>.*?</[^>]+>", "", display_text, flags=re.DOTALL)
         display_text = re.sub(r"<[^>]+>", "", display_text).strip()
@@ -99,9 +159,15 @@ class TTSEngine:
         clean_text = re.sub(r"\s+", " ", clean_text).strip()
 
         if self.tts_type == "qwen3-tts":
+            self._ensure_qwen_loaded()
             self._speak_qwen(text, clean_text, interrupt_event)
         elif self.tts_type == "piper-tts":
-            self._speak_piper(clean_text, interrupt_event)
+            # Before loading Piper, we can unload Qwen to save VRAM
+            if self.model is not None:
+                self.unload_models()
+            
+            if self._ensure_piper_loaded():
+                self._speak_piper(clean_text, interrupt_event)
 
     def _speak_qwen(self, original_text, clean_text, interrupt_event):
         tags = re.findall(r"\[([A-Za-zäöüß ]+)+\]", original_text)
@@ -147,7 +213,8 @@ class TTSEngine:
                         )
                     sf.write(output_file, wavs[0], sr)
                     audio_queue.put(output_file)
-                except Exception:
+                except Exception as e:
+                    print(f"Qwen generation error: {e}")
                     audio_queue.put(None)
             audio_queue.put("DONE")
 
@@ -156,20 +223,28 @@ class TTSEngine:
 
     def _speak_piper(self, text, interrupt_event):
         output_file = f"piper_temp_{threading.get_ident()}.wav"
+        model_path = os.path.join(self.piper_dir, f"{self.piper_voice}.onnx")
+        
         try:
-            # Check if model exists, piper will auto-download if name is provided
-            # Piper command: piper --model <name_or_path> --output_file <path>
+            # Piper expects text via stdin
             process = subprocess.Popen(
-                [self.piper_binary, "--model", self.piper_voice, "--output_file", output_file],
+                [self.piper_binary, "--model", model_path, "--output_file", output_file],
                 stdin=subprocess.PIPE,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
             )
-            process.communicate(input=text.encode('utf-8'))
+            stdout, stderr = process.communicate(input=text.encode('utf-8'))
             
+            if process.returncode != 0:
+                print(f"Piper process failed (code {process.returncode}): {stderr.decode()}")
+                return
+
             if os.path.exists(output_file):
                 self._play_wav(output_file, interrupt_event)
-                os.remove(output_file)
+                try:
+                    os.remove(output_file)
+                except:
+                    pass
         except Exception as e:
             print(f"Piper error: {e}")
 
@@ -185,7 +260,11 @@ class TTSEngine:
             if file_path is None: continue
             
             self._play_wav_with_pyaudio(p, file_path, interrupt_event)
-            if os.path.exists(file_path): os.remove(file_path)
+            if os.path.exists(file_path): 
+                try:
+                    os.remove(file_path)
+                except:
+                    pass
         p.terminate()
 
     def _play_wav(self, file_path, interrupt_event):
@@ -207,5 +286,5 @@ class TTSEngine:
             stream.stop_stream()
             stream.close()
             wf.close()
-        except:
-            pass
+        except Exception as e:
+            print(f"Audio playback error: {e}")
