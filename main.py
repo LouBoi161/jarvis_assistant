@@ -185,10 +185,12 @@ class JarvisAssistant:
 
     def transcribe_audio(self, wav_path):
         self.log("Transkribiere Audio...", "debug")
-        result = self.stt_model.transcribe(wav_path, language="de")
+        # Sprache auf None setzen für automatische Erkennung (DE/EN Fokus)
+        result = self.stt_model.transcribe(wav_path)
         text = result["text"].strip()
         if text:
-            self.log(f"Du: {text}", "standard")
+            detected_lang = result.get("language", "unknown")
+            self.log(f"Du ({detected_lang}): {text}", "standard")
         return text
 
     def handle_slash_commands(self, text):
@@ -278,7 +280,7 @@ class JarvisAssistant:
 
         sys_prompt = (
             "Du bist Jarvis, ein autonomer, hochintelligenter KI-Agent.\n"
-            "SPRACHE: Antworte IMMER auf DEUTSCH. Verfalle niemals ins Englische.\n\n"
+            "SPRACHE: Antworte bevorzugt auf DEUTSCH. Wenn der Nutzer dich auf Englisch anspricht, antworte auf ENGLISCH.\n\n"
             "INTERNES DENKEN:\n"
             "Nutze `<thought>...</thought>` für deine Planung. Dieser Bereich ist streng geheim.\n\n"
             "WERKZEUGE (NUR JSON AM ENDE):\n"

@@ -101,6 +101,7 @@ class TTSEngine:
                     self.ref_text = f.read().strip()
             else:
                 print(f"Analyzing reference voice {self.qwen_voice}...")
+                # Automatische Spracherkennung für Referenz-Stimme
                 result = self.stt_model.transcribe(self.ref_wav)
                 self.ref_text = result["text"].strip()
                 with open(ref_txt_file, "w") as f:
