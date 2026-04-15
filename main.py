@@ -204,12 +204,17 @@ class JarvisAssistant:
 
     def handle_slash_commands(self, text):
         """Verarbeitet Befehle, die mit / beginnen, direkt ohne KI."""
-        cmd_parts = text.lower().strip().split()
+        clean_text = text.strip().lower()
+        if not clean_text.startswith("/"):
+            return False
+            
+        cmd_parts = clean_text.split()
         if not cmd_parts: return False
         
         cmd = cmd_parts[0]
         
-        if cmd == "/settings" or cmd == "/config":
+        # Aliases für Settings
+        if cmd in ["/settings", "/config", "/einstellungen", "/setup"]:
             self.open_settings()
             return True
             
@@ -273,8 +278,12 @@ class JarvisAssistant:
         listener_thread.join(timeout=1.0)
 
     def run_ollama_agent(self, user_text):
-        if user_text.startswith("/"):
+        # Slash-Commands SOFORT abfangen (Robust-Check)
+        if user_text.strip().startswith("/"):
             if self.handle_slash_commands(user_text):
+                return
+            else:
+                self.log(f"Unbekannter Befehl: {user_text}", "standard")
                 return
 
         # Sprach-Logik für den System-Prompt
