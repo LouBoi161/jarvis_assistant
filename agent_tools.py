@@ -11,6 +11,7 @@ from PyQt5.QtWidgets import QApplication, QInputDialog, QLineEdit, QComboBox, QV
 # Globale Variable für persistente Shell-Sitzung
 active_process = None
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
+VOICES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "voices")
 
 def get_security_mode():
     """Liest den Sicherheitsmodus direkt aus der Config."""
@@ -39,19 +40,19 @@ def _gui_worker(queue, func_name, *args, **kwargs):
     
     queue.put(result)
 
-def manage_jarvis_gui(current_model, current_view_mode="standard", security_mode=True):
+def manage_jarvis_gui(current_config):
     """Öffnet das GUI-Fenster in einem sicheren Unterprozess."""
     q = Queue()
-    p = Process(target=_gui_worker, args=(q, "manage_jarvis_gui", current_model, current_view_mode, security_mode))
+    p = Process(target=_gui_worker, args=(q, "manage_jarvis_gui", current_config))
     p.start()
     p.join()
     return q.get()
 
-def _manage_jarvis_gui_logic(current_model, current_view_mode="standard", security_mode=True):
+def _manage_jarvis_gui_logic(config):
     """Die eigentliche Logik der Einstellungs-GUI."""
     dialog = QDialog()
     dialog.setWindowTitle("JARVIS System Control")
-    dialog.setMinimumWidth(400)
+    dialog.setMinimumWidth(450)
     
     # Modernes Jarvis-Design (QSS)
     dialog.setStyleSheet("""
@@ -66,7 +67,7 @@ def _manage_jarvis_gui_logic(current_model, current_view_mode="standard", securi
             font-weight: bold;
             margin-top: 10px;
         }
-        QComboBox, QCheckBox {
+        QComboBox, QCheckBox, QLineEdit {
             background-color: #1a1f29;
             color: #ffffff;
             border: 1px solid #00d4ff;
@@ -86,6 +87,8 @@ def _manage_jarvis_gui_logic(current_model, current_view_mode="standard", securi
     """)
 
     layout = QVBoxLayout()
+    
+    # Ollama Model
     layout.addWidget(QLabel("Ollama Model Selection:"))
     model_combo = QComboBox()
     try:
@@ -95,40 +98,99 @@ def _manage_jarvis_gui_logic(current_model, current_view_mode="standard", securi
         else:
             models = [m['name'] for m in local_models_resp.get('models', [])]
     except:
-        models = [current_model]
+        models = [config.get("ollama_model")]
     
     model_combo.addItems(sorted(list(set(models))))
-    if current_model in models:
-        model_combo.setCurrentText(current_model)
+    if config.get("ollama_model") in models:
+        model_combo.setCurrentText(config.get("ollama_model"))
     layout.addWidget(model_combo)
     
+    # View Mode
     layout.addWidget(QLabel("System View Mode:"))
     view_mode_combo = QComboBox()
     view_mode_combo.addItems(["standard", "debug"])
-    view_mode_combo.setCurrentText(current_view_mode)
+    view_mode_combo.setCurrentText(config.get("view_mode", "standard"))
     layout.addWidget(view_mode_combo)
+
+    # TTS Type
+    layout.addWidget(QLabel("TTS Engine:"))
+    tts_combo = QComboBox()
+    tts_combo.addItems(["qwen3-tts", "piper-tts", "none"])
+    tts_combo.setCurrentText(config.get("tts_type", "qwen3-tts"))
+    layout.addWidget(tts_combo)
+
+    # Piper Voice
+    piper_label = QLabel("Piper Voice (name-lang-quality):")
+    layout.addWidget(piper_label)
+    piper_combo = QComboBox()
+    # Hier könnten wir piper --list-voices parsen, aber wir nutzen eine Liste der gängigen deutschen Stimmen
+    piper_voices = [
+        "de_DE-thorsten-high",
+        "de_DE-thorsten-medium",
+        "de_DE-thorsten_emotional-medium",
+        "de_DE-pavoque-low"
+    ]
+    piper_combo.addItems(piper_voices)
+    piper_combo.setEditable(True)
+    if config.get("piper_voice") in piper_voices:
+        piper_combo.setCurrentText(config.get("piper_voice"))
+    else:
+        piper_combo.setCurrentText(config.get("piper_voice", "de_DE-thorsten-high"))
+    layout.addWidget(piper_combo)
+
+    # Qwen Voice
+    qwen_label = QLabel("Qwen Voice (.wav in voices/):")
+    layout.addWidget(qwen_label)
+    qwen_combo = QComboBox()
+    if not os.path.exists(VOICES_DIR):
+        os.makedirs(VOICES_DIR)
     
+    qwen_voices = [f for f in os.listdir(VOICES_DIR) if f.endswith(".wav")]
+    if not qwen_voices:
+        qwen_voices = ["default.wav"]
+    
+    qwen_combo.addItems(qwen_voices)
+    if config.get("qwen_voice") in qwen_voices:
+        qwen_combo.setCurrentText(config.get("qwen_voice"))
+    layout.addWidget(qwen_combo)
+
+    # Visibility logic
+    def update_visibility():
+        is_piper = tts_combo.currentText() == "piper-tts"
+        is_qwen = tts_combo.currentText() == "qwen3-tts"
+        piper_label.setVisible(is_piper)
+        piper_combo.setVisible(is_piper)
+        qwen_label.setVisible(is_qwen)
+        qwen_combo.setVisible(is_qwen)
+
+    tts_combo.currentTextChanged.connect(update_visibility)
+    update_visibility()
+
+    # Security
     layout.addWidget(QLabel("Security Settings:"))
     security_checkbox = QCheckBox("Security Mode (Commands Blocked)")
-    security_checkbox.setChecked(security_mode)
+    security_checkbox.setChecked(config.get("security_mode", True))
     layout.addWidget(security_checkbox)
     
     save_btn = QPushButton("APPLY CONFIGURATION")
     layout.addWidget(save_btn)
     
-    settings = {}
+    new_config = {}
     def save():
-        settings['model'] = model_combo.currentText()
-        settings['view_mode'] = view_mode_combo.currentText()
-        settings['security_mode'] = security_checkbox.isChecked()
+        new_config['ollama_model'] = model_combo.currentText()
+        new_config['view_mode'] = view_mode_combo.currentText()
+        new_config['security_mode'] = security_checkbox.isChecked()
+        new_config['tts_type'] = tts_combo.currentText()
+        new_config['piper_voice'] = piper_combo.currentText()
+        new_config['qwen_voice'] = qwen_combo.currentText()
         dialog.accept()
         
     save_btn.clicked.connect(save)
     dialog.setLayout(layout)
     dialog.exec_()
     
-    if settings:
-        return json.dumps({"type": "config_update", "data": settings})
+    if new_config:
+        return json.dumps({"type": "config_update", "data": new_config})
     return "No changes applied."
 
 def get_gui_password():
@@ -317,11 +379,8 @@ def parse_and_execute_tool(json_string: str) -> str:
         elif tool_name == "send_input":
             return send_input(**kwargs)
         elif tool_name == "manage_jarvis_gui":
-            return manage_jarvis_gui(
-                kwargs.get("current_model"), 
-                kwargs.get("current_view_mode", "standard"),
-                kwargs.get("security_mode", True)
-            )
+            # Pass die gesamte config an die GUI an
+            return manage_jarvis_gui(kwargs)
         else:
             return f"Unbekanntes Tool: {tool_name}"
     except json.JSONDecodeError:

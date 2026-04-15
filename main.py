@@ -20,15 +20,17 @@ logging.getLogger("transformers").setLevel(logging.ERROR)
 logging.getLogger("httpx").setLevel(logging.ERROR) # Ollama nutzt httpx
 # Globale Standard-Konfiguration
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
-DEFAULT_MODEL = "gemma4:e4b"
 WHISPER_MODEL = "base"
 
 class JarvisAssistant:
     def __init__(self):
-        # Standardmäßig debug, bis config geladen ist
-        self.view_mode = "debug"
+        # Standard-Werte
+        self.view_mode = "standard"
         self.ollama_model = None
         self.security_mode = True
+        self.tts_type = "qwen3-tts"
+        self.piper_voice = "de_DE-thorsten-high"
+        self.qwen_voice = "default.wav"
         
         # Konfiguration laden
         self.load_config()
@@ -39,8 +41,8 @@ class JarvisAssistant:
         self.log(f"Lade Whisper STT Modell ({WHISPER_MODEL})...", "debug")
         self.stt_model = whisper.load_model(WHISPER_MODEL)
         
-        # TTSEngine das bereits geladene Whisper Modell mitgeben (spart RAM)
-        self.tts = TTSEngine(use_gpu=True, stt_model=self.stt_model)
+        # TTSEngine initialisieren
+        self.init_tts()
         
         self.history = []
         self.text_mode = False
@@ -54,6 +56,14 @@ class JarvisAssistant:
 
         if self.ollama_model:
             self.check_ollama_model(self.ollama_model)
+
+    def init_tts(self):
+        config = {
+            "tts_type": self.tts_type,
+            "piper_voice": self.piper_voice,
+            "qwen_voice": self.qwen_voice
+        }
+        self.tts = TTSEngine(config=config, use_gpu=True, stt_model=self.stt_model)
 
     def log(self, message, level="debug"):
         """Filtert Ausgaben basierend auf dem view_mode."""
@@ -85,7 +95,10 @@ class JarvisAssistant:
                     self.ollama_model = config.get("ollama_model")
                     self.view_mode = config.get("view_mode", "standard")
                     self.security_mode = config.get("security_mode", True)
-                    self.log(f"Konfiguration geladen. Modell: {self.ollama_model}, Mode: {self.view_mode}, Security: {self.security_mode}", "debug")
+                    self.tts_type = config.get("tts_type", "qwen3-tts")
+                    self.piper_voice = config.get("piper_voice", "de_DE-thorsten-high")
+                    self.qwen_voice = config.get("qwen_voice", "default.wav")
+                    self.log(f"Konfiguration geladen.", "debug")
                     return
             except Exception as e:
                 self.log(f"Fehler beim Laden der Config: {e}", "debug")
@@ -94,26 +107,43 @@ class JarvisAssistant:
         self.security_mode = True
 
     def open_settings(self):
-        """Öffnet die GUI-Einstellungen zur Modellauswahl."""
+        """Öffnet die GUI-Einstellungen."""
         self.log("Öffne Einstellungen...", "debug")
         res = parse_and_execute_tool(json.dumps({
             "tool": "manage_jarvis_gui", 
             "kwargs": {
-                "current_model": self.ollama_model or "Wähle ein Modell...",
-                "current_view_mode": self.view_mode,
-                "security_mode": self.security_mode
+                "ollama_model": self.ollama_model or "Wähle ein Modell...",
+                "view_mode": self.view_mode,
+                "security_mode": self.security_mode,
+                "tts_type": self.tts_type,
+                "piper_voice": self.piper_voice,
+                "qwen_voice": self.qwen_voice
             }
         }))
         if res.startswith('{"type": "config_update"'):
             new_data = json.loads(res).get("data", {})
-            if "model" in new_data:
-                self.ollama_model = new_data["model"]
-            if "view_mode" in new_data:
-                self.view_mode = new_data["view_mode"]
-            if "security_mode" in new_data:
-                self.security_mode = new_data["security_mode"]
+            self.ollama_model = new_data.get("ollama_model", self.ollama_model)
+            self.view_mode = new_data.get("view_mode", self.view_mode)
+            self.security_mode = new_data.get("security_mode", self.security_mode)
+            
+            old_tts_type = self.tts_type
+            old_piper_voice = self.piper_voice
+            old_qwen_voice = self.qwen_voice
+            
+            self.tts_type = new_data.get("tts_type", self.tts_type)
+            self.piper_voice = new_data.get("piper_voice", self.piper_voice)
+            self.qwen_voice = new_data.get("qwen_voice", self.qwen_voice)
+            
             self.save_config()
-            self.log(f"Einstellungen übernommen: {self.ollama_model} ({self.view_mode}, Security: {self.security_mode})", "standard")
+            
+            # Re-init TTS if settings changed
+            if (old_tts_type != self.tts_type or 
+                old_piper_voice != self.piper_voice or 
+                old_qwen_voice != self.qwen_voice):
+                self.log("TTS-Einstellungen geändert. Initialisiere neu...", "standard")
+                self.init_tts()
+            
+            self.log(f"Einstellungen übernommen.", "standard")
         
         if not self.ollama_model:
             self.log("Kein Modell ausgewählt. Jarvis kann nicht starten.", "standard")
@@ -125,7 +155,10 @@ class JarvisAssistant:
             config = {
                 "ollama_model": self.ollama_model,
                 "view_mode": self.view_mode,
-                "security_mode": self.security_mode
+                "security_mode": self.security_mode,
+                "tts_type": self.tts_type,
+                "piper_voice": self.piper_voice,
+                "qwen_voice": self.qwen_voice
             }
             with open(CONFIG_FILE, "w") as f:
                 json.dump(config, f, indent=4)
@@ -198,11 +231,9 @@ class JarvisAssistant:
         def wakeword_listener():
             try:
                 from openwakeword.model import Model
-                # Fehler-Fix für AudioFeatures.__init__() - inference_framework entfernt
                 try:
                     oww = Model(wakeword_models=["hey_jarvis"])
                 except:
-                    # Fallback auf Standard-Modell falls Version inkompatibel
                     oww = Model()
                 
                 mic = audio_capture.get_audio_stream(audio_capture.CHUNK)
@@ -211,7 +242,6 @@ class JarvisAssistant:
                 while not interrupt_event.is_set():
                     data = mic.read(audio_capture.CHUNK, exception_on_overflow=False)
                     preds = oww.predict(np.frombuffer(data, dtype=np.int16))
-                    # Suche nach irgendeinem Wake Word mit hoher Wahrscheinlichkeit
                     if any(v > 0.5 for k, v in preds.items() if "jarvis" in k.lower() or "hey_jarvis" in k.lower()):
                         self.log("Unterbrechung durch Wake Word erkannt!", "debug")
                         self.interrupted_by_wakeword = True
@@ -230,7 +260,6 @@ class JarvisAssistant:
         listener_thread.join(timeout=1.0)
 
     def run_ollama_agent(self, user_text):
-        # Slash-Commands abfangen
         if user_text.startswith("/"):
             if self.handle_slash_commands(user_text):
                 return
@@ -280,27 +309,19 @@ class JarvisAssistant:
             if not response_text: break
                 
             import re
-            
-            # 1. Denken extrahieren (unterstützt <thought> und <think> von Modellen wie DeepSeek)
             thought_match = re.search(r"<(thought|think)>(.*?)</\1>", response_text, re.DOTALL)
             if thought_match:
                 thought_content = thought_match.group(2).strip()
                 self.log(f"[Thinking]: {thought_content}", "debug")
-                # Alle Denken-Blöcke aus der Antwort für den User entfernen
                 response_text = re.sub(r"<(thought|think)>.*?</\1>", "", response_text, flags=re.DOTALL).strip()
 
-            # 2. JSON extrahieren (Werkzeuge)
             json_match = re.search(r"(\{.*\})", response_text, re.DOTALL)
             
             if json_match:
                 json_string = json_match.group(1)
-                
-                # SÄUBERUNG: Entferne JSON, Code-Blöcke und alle Tags komplett aus dem Sprechtext
                 speech_text = response_text.replace(json_string, "").strip()
-                # Radikal alle Markdown Code-Blöcke entfernen (```...```)
                 speech_text = re.sub(r"```[a-z]*\n.*?\n```", "", speech_text, flags=re.DOTALL | re.IGNORECASE)
                 speech_text = re.sub(r"```.*?```", "", speech_text, flags=re.DOTALL)
-                # Tags entfernen
                 speech_text = re.sub(r"<(thought|think)>.*?</\1>", "", speech_text, flags=re.DOTALL)
                 speech_text = re.sub(r"<[^>]+>", "", speech_text)
                 
@@ -327,17 +348,13 @@ class JarvisAssistant:
                         self.log(">>>> [FEHLER]: KI hat ein ungültiges Werkzeug-Format gesendet.", "debug")
                 except Exception as e:
                     self.log(f">>>> [FEHLER]: JSON-Parsing fehlgeschlagen: {e}", "debug")
-                except Exception as e:
-                    self.history.append({"role": "system", "content": f"Systemfehler: {e}"})
             else:
                 self.history.append({"role": "assistant", "content": response_text})
-                # Nur einmal loggen im Standard-Modus
                 self.log(f"[{self.ollama_model}]: {response_text}", "standard")
                 self.speak_with_interrupt(response_text)
                 break
 
     def voice_input_worker(self):
-        """Hintergrund-Thread für das Wake Word."""
         while True:
             try:
                 if self.interrupted_by_wakeword:
@@ -371,7 +388,6 @@ class JarvisAssistant:
         self.log(" -> Sprich 'Hey Jarvis' ODER tippe einfach hier unten!", "standard")
         self.log("===============================", "standard")
         
-        # Voice Input im Hintergrund starten
         threading.Thread(target=self.voice_input_worker, daemon=True).start()
         
         while True:
