@@ -123,15 +123,19 @@ def _manage_jarvis_gui_logic(config):
     piper_label = QLabel("Piper Voice (name-lang-quality):")
     layout.addWidget(piper_label)
     piper_combo = QComboBox()
-    # Hier könnten wir piper --list-voices parsen, aber wir nutzen eine Liste der gängigen Stimmen
-    piper_voices = [
-        "de_DE-thorsten-high",
-        "de_DE-ramona-low",
-        "en_US-lessac-high",
-        "en_US-amy-medium",
-        "de_DE-thorsten_emotional-medium"
-    ]
-    piper_combo.addItems(piper_voices)
+    
+    # Scan piper_models directory for available voices
+    piper_models_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "piper_models")
+    if not os.path.exists(piper_models_dir):
+        os.makedirs(piper_models_dir)
+    
+    # Get all .onnx files and use their names for the list
+    piper_voices = [f.replace(".onnx", "") for f in os.listdir(piper_models_dir) if f.endswith(".onnx")]
+    
+    if not piper_voices:
+        piper_voices = ["de_DE-thorsten-high"] # Default fallback
+
+    piper_combo.addItems(sorted(list(set(piper_voices))))
     piper_combo.setEditable(True)
     if config.get("piper_voice") in piper_voices:
         piper_combo.setCurrentText(config.get("piper_voice"))
