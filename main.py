@@ -8,6 +8,7 @@ import numpy as np
 import threading
 import audio_capture
 import logging
+import re
 
 # Eigene Module
 from audio_capture import listen_for_wakeword, record_until_silence, save_wav
@@ -71,7 +72,6 @@ class JarvisAssistant:
         """Filtert Ausgaben basierend auf dem view_mode."""
         if not message: return
         
-        import re
         if self.view_mode == "standard":
             if level == "standard":
                 # 1. Entferne [Emotion]-Tags
@@ -278,7 +278,7 @@ class JarvisAssistant:
         listener_thread.join(timeout=1.0)
 
     def run_ollama_agent(self, user_text):
-        # Slash-Commands SOFORT abfangen (Robust-Check)
+        # Slash-Commands SOFORT abfangen
         if user_text.strip().startswith("/"):
             if self.handle_slash_commands(user_text):
                 return
@@ -334,7 +334,6 @@ class JarvisAssistant:
         if not self.history:
             self.history.append({"role": "system", "content": sys_prompt})
         else:
-            # System prompt aktualisieren, falls sich die Sprache geändert hat
             self.history[0] = {"role": "system", "content": sys_prompt}
             
         self.history.append({"role": "user", "content": user_text})
@@ -347,26 +346,23 @@ class JarvisAssistant:
                 response = ollama.chat(model=self.ollama_model, messages=self.history, stream=False)
                 response_text = response['message']['content'].strip()
             except Exception as e:
-                self.log(f"Ollama Fehler: {e}", "debug")
+                self.log(f"Ollama Fehler: {e}", "standard")
                 break
             
-            if not response_text: break
+            if not response_text:
+                self.log("Ollama hat eine leere Antwort gesendet.", "debug")
+                break
                 
-            import re
-            thought_match = re.search(r"<(thought|think)>(.*?)</\1>", response_text, re.DOTALL)
-            if thought_match:
-                thought_content = thought_match.group(2).strip()
-                self.log(f"[Thinking]: {thought_content}", "debug")
-                response_text = re.sub(r"<(thought|think)>.*?</\1>", "", response_text, flags=re.DOTALL).strip()
-
+            # JSON extrahieren
             json_match = re.search(r"(\{.*\})", response_text, re.DOTALL)
             
             if json_match:
                 json_string = json_match.group(1)
+                
+                # Sprechtext säubern
                 speech_text = response_text.replace(json_string, "").strip()
                 speech_text = re.sub(r"```[a-z]*\n.*?\n```", "", speech_text, flags=re.DOTALL | re.IGNORECASE)
                 speech_text = re.sub(r"```.*?```", "", speech_text, flags=re.DOTALL)
-                speech_text = re.sub(r"<(thought|think)>.*?</\1>", "", speech_text, flags=re.DOTALL)
                 speech_text = re.sub(r"<[^>]+>", "", speech_text)
                 
                 if speech_text:
@@ -382,16 +378,18 @@ class JarvisAssistant:
                     tool_args = data.get('kwargs', {})
                     
                     if tool_name:
-                        self.log(f"\n>>>> [JARVIS AKTIV]: Nutze Werkzeug '{tool_name}'", "standard")
-                        self.log(f">>>> [DETAILS]: {tool_args}\n", "standard")
+                        # WICHTIG: Tool-Nutzung IMMER anzeigen
+                        print(f"\n>>>> [JARVIS]: Nutze '{tool_name}'...")
                         
                         tool_result = parse_and_execute_tool(json_string)
-                        self.log(f">>>> [INFO]: Werkzeug-Ausführung abgeschlossen. Verarbeite Ergebnisse...\n", "standard")
+                        
                         self.history.append({"role": "system", "content": f"Tool Ergebnis:\n{tool_result}"})
                     else:
-                        self.log(">>>> [FEHLER]: KI hat ein ungültiges Werkzeug-Format gesendet.", "debug")
+                        self.log("KI hat ein ungültiges Werkzeug-Format gesendet.", "debug")
+                        break
                 except Exception as e:
-                    self.log(f">>>> [FEHLER]: JSON-Parsing fehlgeschlagen: {e}", "debug")
+                    self.log(f"JSON-Parsing fehlgeschlagen: {e}", "debug")
+                    break
             else:
                 self.history.append({"role": "assistant", "content": response_text})
                 self.log(f"[{self.ollama_model}]: {response_text}", "standard")
