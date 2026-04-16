@@ -9,6 +9,7 @@ import threading
 import audio_capture
 import logging
 import re
+import sys
 
 # Eigene Module
 from audio_capture import listen_for_wakeword, record_until_silence, save_wav
@@ -79,6 +80,7 @@ class JarvisAssistant:
                 # 1. Entferne [Emotion]-Tags
                 clean_message = re.sub(r"\[[A-Za-zäöüß ]+\]", "", message)
                 # 2. Entferne <Tag>...</Tag> inklusive Inhalt
+                clean_message = re.sub(r"<(thought|think)>.*?</\1>", "", clean_message, flags=re.DOTALL)
                 clean_message = re.sub(r"<[^>]+>.*?</[^>]+>", "", clean_message, flags=re.DOTALL)
                 # 3. Entferne verbleibende einzelne <Tags>
                 clean_message = re.sub(r"<[^>]+>", "", clean_message)
@@ -103,7 +105,6 @@ class JarvisAssistant:
                     self.tts_type = config.get("tts_type", "qwen3-tts")
                     self.piper_voice = config.get("piper_voice", "de_DE-thorsten-high")
                     self.qwen_voice = config.get("qwen_voice", "default.wav")
-                    self.log(f"Konfiguration geladen.", "debug")
                     return
             except Exception as e:
                 self.log(f"Fehler beim Laden der Config: {e}", "debug")
@@ -288,8 +289,6 @@ class JarvisAssistant:
                 self.log(f"Unbekannter Befehl: {user_text}", "standard")
                 return
 
-        self.log(f"\n[JARVIS]: Denke nach (Modell: {self.ollama_model})...", "standard")
-
         # Sprach-Logik für den System-Prompt
         target_lang = self.language
         if target_lang == "auto":
@@ -303,19 +302,19 @@ class JarvisAssistant:
                 security_info = "\nSECURITY: DISABLED. You have FULL SYSTEM ACCESS. Use execute_command for any OS task."
 
             sys_prompt = (
-                "You are Jarvis, a proactive AI assistant. You have local system access.\n"
+                "You are Jarvis, a proactive AI assistant with local system access.\n"
                 f"{security_info}\n\n"
-                "CRITICAL: Put ALL internal planning/reasoning inside `<thought>...</thought>` tags. NEVER narrate your actions outside these tags.\n\n"
-                "EXAMPLE RESPONSE:\n"
-                "<thought>User wants to open Firefox. I will use execute_command.</thought>\n"
-                "{ \"tool\": \"execute_command\", \"kwargs\": { \"command\": \"firefox\" } }\n\n"
+                "INTERNAL THOUGHTS:\n"
+                "You MUST use `<thought>...</thought>` to plan your multi-step actions.\n\n"
                 "TOOLS:\n"
+                "To use a tool, output a JSON block at the VERY END of your response:\n"
                 "{ \"tool\": \"search_web\", \"kwargs\": { \"query\": \"...\" } }\n"
                 "{ \"tool\": \"execute_command\", \"kwargs\": { \"command\": \"...\" } }\n\n"
                 "RULES:\n"
                 "1. INVESTIGATE FIRST: Use `execute_command` (e.g., `cat /etc/os-release`) to find system info yourself.\n"
-                "2. NO META-TALK: Do not say 'I will now do X' or 'The user wants Y'. Just do it.\n"
-                "3. Respond in ENGLISH. Short spoken text only."
+                "2. NO META-TALK: Do not narrate your actions outside thought tags.\n"
+                "3. Always write a short text response before the JSON block.\n"
+                "4. Respond in ENGLISH."
             )
         else:
             # Standard: Deutsch
@@ -328,17 +327,17 @@ class JarvisAssistant:
             sys_prompt = (
                 "Du bist Jarvis, ein proaktiver KI-Assistent mit Systemzugriff.\n"
                 f"{security_info}\n\n"
-                "WICHTIG: Schreibe ALLE internen Planungen/Überlegungen AUSSCHLIESSLICH in `<thought>...</thought>` Tags. Beschreibe niemals außerhalb dieser Tags, was du gerade tust.\n\n"
-                "BEISPIEL ANTWORT:\n"
-                "<thought>Nutzer möchte Firefox öffnen. Ich nutze execute_command.</thought>\n"
-                "{ \"tool\": \"execute_command\", \"kwargs\": { \"command\": \"firefox\" } }\n\n"
+                "INTERNES DENKEN:\n"
+                "Du MUSST `<thought>...</thought>` nutzen, um vor deiner Aktion nachzudenken.\n\n"
                 "WERKZEUGE:\n"
+                "Um ein Werkzeug zu nutzen, schreibe einen JSON-Block GANZ AM ENDE deiner Antwort:\n"
                 "{ \"tool\": \"search_web\", \"kwargs\": { \"query\": \"...\" } }\n"
                 "{ \"tool\": \"execute_command\", \"kwargs\": { \"command\": \"...\" } }\n\n"
                 "REGELN:\n"
                 "1. ERST ERMITTELN: Nutze `execute_command` (z.B. `cat /etc/os-release`), um Systeminfos selbst zu finden.\n"
-                "2. KEIN META-TALK: Sag niemals 'Ich werde jetzt X tun' oder 'Der Nutzer möchte Y'. Handle einfach.\n"
-                "3. Antworte auf DEUTSCH. Halte dich kurz."
+                "2. KEIN META-TALK: Beschreibe deine Handlungen nicht außerhalb von Gedanken-Tags.\n"
+                "3. Schreibe immer einen kurzen Antworttext vor dem JSON-Block.\n"
+                "4. Antworte auf DEUTSCH."
             )
         
         if not self.history:
@@ -353,65 +352,63 @@ class JarvisAssistant:
             if self.interrupted_by_wakeword: break
             
             try:
-                response = ollama.chat(model=self.ollama_model, messages=self.history, stream=False)
-                response_text = response['message']['content'].strip()
+                self.log(f"\n[JARVIS]: Generiere Antwort (Schritt {step+1})...", "debug")
+                
+                full_response = ""
+                # Header anzeigen
+                if self.view_mode == "debug":
+                    print(f"[{self.ollama_model}]: ", end="", flush=True)
+                
+                # STREAMING START
+                for chunk in ollama.chat(model=self.ollama_model, messages=self.history, stream=True):
+                    if self.interrupted_by_wakeword: break
+                    token = chunk['message']['content']
+                    full_response += token
+                    if self.view_mode == "debug":
+                        print(token, end="", flush=True)
+                
+                if self.view_mode == "debug": print() # Newline nach Stream
+                response_text = full_response.strip()
+                
             except Exception as e:
                 self.log(f"Ollama Fehler: {e}", "standard")
                 break
             
-            if not response_text:
-                self.log("Ollama hat eine leere Antwort gesendet.", "debug")
-                break
+            if not response_text: break
                 
             # JSON extrahieren
             json_match = re.search(r"(\{.*\})", response_text, re.DOTALL)
             
+            # Sprechtext säubern (Gedanken entfernen)
+            speech_text = re.sub(r"<(thought|think)>.*?</\1>", "", response_text, flags=re.DOTALL).strip()
+            if json_match:
+                speech_text = speech_text.replace(json_match.group(1), "").strip()
+            speech_text = re.sub(r"<[^>]+>", "", speech_text).strip()
+
+            if speech_text:
+                self.log(f"[{self.ollama_model}]: {speech_text}", "standard")
+                self.speak_with_interrupt(speech_text)
+                if self.interrupted_by_wakeword: break
+            
+            self.history.append({"role": "assistant", "content": response_text})
+            
             if json_match:
                 json_string = json_match.group(1)
-                
-                # Sprechtext säubern
-                speech_text = response_text.replace(json_string, "").strip()
-                speech_text = re.sub(r"```[a-z]*\n.*?\n```", "", speech_text, flags=re.DOTALL | re.IGNORECASE)
-                speech_text = re.sub(r"```.*?```", "", speech_text, flags=re.DOTALL)
-                speech_text = re.sub(r"<[^>]+>", "", speech_text)
-                
-                if speech_text:
-                    self.log(f"[{self.ollama_model}]: {speech_text}", "standard")
-                    self.speak_with_interrupt(speech_text)
-                    if self.interrupted_by_wakeword: break
-                
-                self.history.append({"role": "assistant", "content": response_text})
-                
                 try:
                     data = json.loads(json_string)
                     tool_name = data.get('tool')
-                    tool_args = data.get('kwargs', {})
                     
                     if tool_name:
-                        # WICHTIG: Tool-Nutzung IMMER anzeigen
                         print(f"\n>>>> [JARVIS]: Nutze '{tool_name}'...")
-                        
                         tool_result = parse_and_execute_tool(json_string)
-                        
                         self.history.append({"role": "system", "content": f"Tool Ergebnis:\n{tool_result}"})
                     else:
-                        self.log("KI hat ein ungültiges Werkzeug-Format gesendet.", "debug")
                         break
                 except Exception as e:
                     self.log(f"JSON-Parsing fehlgeschlagen: {e}", "debug")
                     break
             else:
-                self.history.append({"role": "assistant", "content": response_text})
-                
-                # Prüfen ob nach der Reinigung noch Text übrig ist
-                speech_text = re.sub(r"<(thought|think)>.*?</\1>", "", response_text, flags=re.DOTALL).strip()
-                speech_text = re.sub(r"<[^>]+>", "", speech_text).strip()
-                
-                if speech_text:
-                    self.log(f"[{self.ollama_model}]: {speech_text}", "standard")
-                    self.speak_with_interrupt(speech_text)
-                else:
-                    self.log("KI hat keine hörbare Antwort gesendet (nur Gedanken).", "debug")
+                # Kein Tool mehr -> Fertig
                 break
 
     def voice_input_worker(self):
@@ -436,8 +433,6 @@ class JarvisAssistant:
                     if text and len(text) > 2:
                         with self.processing_lock:
                             self.run_ollama_agent(text)
-                            self.log(f"\n[TEXT MODUS ({self.ollama_model})] Gib einen Befehl ein:", "debug")
-                            self.log("> ", "debug")
             except Exception as e:
                 self.log(f"Fehler im Voice-Worker: {e}", "debug")
 
