@@ -59,6 +59,8 @@ class JarvisAssistant:
 
         if self.ollama_model:
             self.check_ollama_model(self.ollama_model)
+            # Modell im Hintergrund laden (Preload)
+            threading.Thread(target=lambda: ollama.generate(model=self.ollama_model, prompt="hi"), daemon=True).start()
 
     def init_tts(self):
         config = {
@@ -285,6 +287,8 @@ class JarvisAssistant:
             else:
                 self.log(f"Unbekannter Befehl: {user_text}", "standard")
                 return
+
+        self.log(f"\n[JARVIS]: Denke nach (Modell: {self.ollama_model})...", "standard")
 
         # Sprach-Logik für den System-Prompt
         target_lang = self.language
