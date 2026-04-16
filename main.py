@@ -396,8 +396,16 @@ class JarvisAssistant:
                     break
             else:
                 self.history.append({"role": "assistant", "content": response_text})
-                self.log(f"[{self.ollama_model}]: {response_text}", "standard")
-                self.speak_with_interrupt(response_text)
+                
+                # Prüfen ob nach der Reinigung noch Text übrig ist
+                speech_text = re.sub(r"<(thought|think)>.*?</\1>", "", response_text, flags=re.DOTALL).strip()
+                speech_text = re.sub(r"<[^>]+>", "", speech_text).strip()
+                
+                if speech_text:
+                    self.log(f"[{self.ollama_model}]: {speech_text}", "standard")
+                    self.speak_with_interrupt(speech_text)
+                else:
+                    self.log("KI hat keine hörbare Antwort gesendet (nur Gedanken).", "debug")
                 break
 
     def voice_input_worker(self):

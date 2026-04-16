@@ -159,6 +159,9 @@ class TTSEngine:
         clean_text = clean_text.replace("(", " ").replace(")", " ")
         clean_text = re.sub(r"\s+", " ", clean_text).strip()
 
+        if not clean_text:
+            return
+
         if self.tts_type == "qwen3-tts":
             self._ensure_qwen_loaded()
             self._speak_qwen(text, clean_text, interrupt_event)
