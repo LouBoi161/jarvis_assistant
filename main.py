@@ -77,15 +77,10 @@ class JarvisAssistant:
         
         if self.view_mode == "standard":
             if level == "standard":
-                # 1. Entferne [Emotion]-Tags
+                # Säuberung für die Konsole
                 clean_message = re.sub(r"\[[A-Za-zäöüß ]+\]", "", message)
-                # 2. Entferne <Tag>...</Tag> inklusive Inhalt
                 clean_message = re.sub(r"<(thought|think)>.*?</\1>", "", clean_message, flags=re.DOTALL)
-                clean_message = re.sub(r"<[^>]+>.*?</[^>]+>", "", clean_message, flags=re.DOTALL)
-                # 3. Entferne verbleibende einzelne <Tags>
-                clean_message = re.sub(r"<[^>]+>", "", clean_message)
-                
-                clean_message = clean_message.strip()
+                clean_message = re.sub(r"<[^>]+>", "", clean_message).strip()
                 if clean_message:
                     print(clean_message)
         else:
@@ -297,47 +292,43 @@ class JarvisAssistant:
         if target_lang == "en":
             security_info = ""
             if self.security_mode:
-                security_info = "\nSECURITY: ENABLED. execute_command is BLOCKED. Use search_web only."
+                security_info = "\nSECURITY: ENABLED. execute_command is BLOCKED."
             else:
-                security_info = "\nSECURITY: DISABLED. You have FULL SYSTEM ACCESS. Use execute_command for any OS task."
+                security_info = "\nSECURITY: DISABLED. FULL SYSTEM ACCESS."
 
             sys_prompt = (
-                "You are Jarvis, a proactive AI assistant with local system access.\n"
+                "You are Jarvis, a concise AI agent.\n"
                 f"{security_info}\n\n"
-                "INTERNAL THOUGHTS:\n"
-                "You MUST use `<thought>...</thought>` to plan your multi-step actions.\n\n"
+                "CRITICAL: Put ALL internal planning inside `<thought>...</thought>` tags.\n"
+                "To use a tool, you MUST provide the JSON block in the SAME message as your text.\n\n"
                 "TOOLS:\n"
-                "To use a tool, output a JSON block at the VERY END of your response:\n"
                 "{ \"tool\": \"search_web\", \"kwargs\": { \"query\": \"...\" } }\n"
                 "{ \"tool\": \"execute_command\", \"kwargs\": { \"command\": \"...\" } }\n\n"
                 "RULES:\n"
-                "1. INVESTIGATE FIRST: Use `execute_command` (e.g., `cat /etc/os-release`) to find system info yourself.\n"
-                "2. NO META-TALK: Do not narrate your actions outside thought tags.\n"
-                "3. Always write a short text response before the JSON block.\n"
-                "4. Respond in ENGLISH."
+                "1. BE CONCISE: Max 1 sentence outside `<thought>` tags.\n"
+                "2. NO LECTURES: Do not explain why something failed. Just report status.\n"
+                "3. AUTONOMOUS: Detect OS -> Search -> Execute. Do not ask for info."
             )
         else:
             # Standard: Deutsch
             security_info = ""
             if self.security_mode:
-                security_info = "\nSICHERHEIT: AKTIVIERT. execute_command ist BLOCKIERT. Nutze nur search_web."
+                security_info = "\nSICHERHEIT: AKTIVIERT. execute_command ist BLOCKIERT."
             else:
-                security_info = "\nSICHERHEIT: DEAKTIVIERT. Du hast VOLLZUGRIFF. Nutze execute_command für alle Systemaufgaben."
+                security_info = "\nSICHERHEIT: DEAKTIVIERT. VOLLZUGRIFF."
 
             sys_prompt = (
-                "Du bist Jarvis, ein proaktiver KI-Assistent mit Systemzugriff.\n"
+                "Du bist Jarvis, ein extrem kurz angebundener KI-Agent.\n"
                 f"{security_info}\n\n"
-                "INTERNES DENKEN:\n"
-                "Du MUSST `<thought>...</thought>` nutzen, um vor deiner Aktion nachzudenken.\n\n"
+                "WICHTIG: Schreibe ALLER Planungen AUSSCHLIESSLICH in `<thought>...</thought>` Tags.\n"
+                "Wenn du ein Werkzeug nutzt, MUSST du das JSON in der GLEICHEN Nachricht wie deinen Text schicken.\n\n"
                 "WERKZEUGE:\n"
-                "Um ein Werkzeug zu nutzen, schreibe einen JSON-Block GANZ AM ENDE deiner Antwort:\n"
                 "{ \"tool\": \"search_web\", \"kwargs\": { \"query\": \"...\" } }\n"
                 "{ \"tool\": \"execute_command\", \"kwargs\": { \"command\": \"...\" } }\n\n"
                 "REGELN:\n"
-                "1. ERST ERMITTELN: Nutze `execute_command` (z.B. `cat /etc/os-release`), um Systeminfos selbst zu finden.\n"
-                "2. KEIN META-TALK: Beschreibe deine Handlungen nicht außerhalb von Gedanken-Tags.\n"
-                "3. Schreibe immer einen kurzen Antworttext vor dem JSON-Block.\n"
-                "4. Antworte auf DEUTSCH."
+                "1. KURZ FASSEN: Maximal 1 Satz außerhalb von `<thought>`.\n"
+                "2. KEINE VORTRÄGE: Erkläre keine Fehler. Berichte nur kurz den Status.\n"
+                "3. AUTONOM: OS prüfen -> Suchen -> Ausführen. Nicht fragen."
             )
         
         if not self.history:
@@ -352,14 +343,12 @@ class JarvisAssistant:
             if self.interrupted_by_wakeword: break
             
             try:
-                self.log(f"\n[JARVIS]: Generiere Antwort (Schritt {step+1})...", "debug")
-                
                 full_response = ""
-                # Header anzeigen
+                # Header nur im Debug anzeigen
                 if self.view_mode == "debug":
                     print(f"[{self.ollama_model}]: ", end="", flush=True)
                 
-                # STREAMING START
+                # STREAMING
                 for chunk in ollama.chat(model=self.ollama_model, messages=self.history, stream=True):
                     if self.interrupted_by_wakeword: break
                     token = chunk['message']['content']
@@ -367,7 +356,7 @@ class JarvisAssistant:
                     if self.view_mode == "debug":
                         print(token, end="", flush=True)
                 
-                if self.view_mode == "debug": print() # Newline nach Stream
+                if self.view_mode == "debug": print()
                 response_text = full_response.strip()
                 
             except Exception as e:
@@ -379,12 +368,13 @@ class JarvisAssistant:
             # JSON extrahieren
             json_match = re.search(r"(\{.*\})", response_text, re.DOTALL)
             
-            # Sprechtext säubern (Gedanken entfernen)
+            # Sprechtext säubern
             speech_text = re.sub(r"<(thought|think)>.*?</\1>", "", response_text, flags=re.DOTALL).strip()
             if json_match:
                 speech_text = speech_text.replace(json_match.group(1), "").strip()
             speech_text = re.sub(r"<[^>]+>", "", speech_text).strip()
 
+            # Nur loggen/sprechen, wenn es Text gibt
             if speech_text:
                 self.log(f"[{self.ollama_model}]: {speech_text}", "standard")
                 self.speak_with_interrupt(speech_text)
@@ -397,18 +387,20 @@ class JarvisAssistant:
                 try:
                     data = json.loads(json_string)
                     tool_name = data.get('tool')
-                    
                     if tool_name:
-                        print(f"\n>>>> [JARVIS]: Nutze '{tool_name}'...")
+                        print(f">>>> [JARVIS]: Nutze '{tool_name}'...")
                         tool_result = parse_and_execute_tool(json_string)
                         self.history.append({"role": "system", "content": f"Tool Ergebnis:\n{tool_result}"})
                     else:
                         break
-                except Exception as e:
-                    self.log(f"JSON-Parsing fehlgeschlagen: {e}", "debug")
+                except:
                     break
             else:
-                # Kein Tool mehr -> Fertig
+                # Falls die KI Text generiert hat, aber KEIN JSON (obwohl sie im <thought> geplant hat)
+                if "<thought>" in response_text or "<think>" in response_text:
+                    # Kleiner "Nudge" um das JSON zu erzwingen
+                    self.history.append({"role": "system", "content": "Bitte gib jetzt den JSON-Tool-Call aus, um fortzufahren."})
+                    continue
                 break
 
     def voice_input_worker(self):
