@@ -297,17 +297,24 @@ class JarvisAssistant:
                 security_info = "\nSECURITY: DISABLED. FULL SYSTEM ACCESS."
 
             sys_prompt = (
-                "You are Jarvis, a concise AI agent.\n"
+                "You are Jarvis, a highly autonomous AI agent.\n"
                 f"{security_info}\n\n"
-                "CRITICAL: Put ALL internal planning inside `<thought>...</thought>` tags.\n"
-                "To use a tool, you MUST provide the JSON block in the SAME message as your text.\n\n"
+                "INTERNAL THOUGHTS:\n"
+                "CRITICAL: You MUST put ALL your planning and reasoning inside `<thought>...</thought>` or `<think>...</think>` tags. The user does not see this.\n"
+                "Write your spoken text AFTER the thought block.\n\n"
                 "TOOLS:\n"
+                "To use a tool, your response MUST end with exactly ONE JSON block. Do NOT use markdown formatting (```json) for it.\n"
                 "{ \"tool\": \"search_web\", \"kwargs\": { \"query\": \"...\" } }\n"
                 "{ \"tool\": \"execute_command\", \"kwargs\": { \"command\": \"...\" } }\n\n"
+                "EXAMPLE:\n"
+                "<thought>I need to check the OS first.</thought>\n"
+                "Checking system information.\n"
+                "{ \"tool\": \"execute_command\", \"kwargs\": { \"command\": \"cat /etc/os-release\" } }\n\n"
                 "RULES:\n"
-                "1. BE CONCISE: Max 1 sentence outside `<thought>` tags.\n"
-                "2. NO LECTURES: Do not explain why something failed. Just report status.\n"
-                "3. AUTONOMOUS: Detect OS -> Search -> Execute. Do not ask for info."
+                "1. STEP BY STEP: Only execute ONE tool at a time. Wait for the result before planning the next step.\n"
+                "2. NO GUESSING: Never guess the OS. Always use `cat /etc/os-release` first if you need to install something.\n"
+                "3. BE CONCISE: Max 1 sentence outside thought tags. Just report status.\n"
+                "4. Respond in ENGLISH."
             )
         else:
             # Standard: Deutsch
@@ -318,17 +325,24 @@ class JarvisAssistant:
                 security_info = "\nSICHERHEIT: DEAKTIVIERT. VOLLZUGRIFF."
 
             sys_prompt = (
-                "Du bist Jarvis, ein extrem kurz angebundener KI-Agent.\n"
+                "Du bist Jarvis, ein hochgradig autonomer KI-Agent.\n"
                 f"{security_info}\n\n"
-                "WICHTIG: Schreibe ALLER Planungen AUSSCHLIESSLICH in `<thought>...</thought>` Tags.\n"
-                "Wenn du ein Werkzeug nutzt, MUSST du das JSON in der GLEICHEN Nachricht wie deinen Text schicken.\n\n"
+                "INTERNES DENKEN:\n"
+                "WICHTIG: Nutze für deine internen Überlegungen IMMER `<thought>...</thought>` oder `<think>...</think>`. Der Nutzer sieht diesen Text NICHT.\n"
+                "Schreibe deinen sichtbaren Antworttext IMMER nach dem Gedanken-Block.\n\n"
                 "WERKZEUGE:\n"
+                "Um ein Werkzeug auszuführen, MUSS deine Antwort am Ende exakt EINEN JSON-Block enthalten. Nutze KEINE Markdown-Formatierung (```json) dafür.\n"
                 "{ \"tool\": \"search_web\", \"kwargs\": { \"query\": \"...\" } }\n"
                 "{ \"tool\": \"execute_command\", \"kwargs\": { \"command\": \"...\" } }\n\n"
+                "BEISPIEL:\n"
+                "<thought>Ich muss zuerst das OS prüfen.</thought>\n"
+                "Ich prüfe das System.\n"
+                "{ \"tool\": \"execute_command\", \"kwargs\": { \"command\": \"cat /etc/os-release\" } }\n\n"
                 "REGELN:\n"
-                "1. KURZ FASSEN: Maximal 1 Satz außerhalb von `<thought>`.\n"
-                "2. KEINE VORTRÄGE: Erkläre keine Fehler. Berichte nur kurz den Status.\n"
-                "3. AUTONOM: OS prüfen -> Suchen -> Ausführen. Nicht fragen."
+                "1. SCHRITT FÜR SCHRITT: Führe immer nur EIN Werkzeug aus und warte auf das Ergebnis, bevor du den nächsten Schritt planst.\n"
+                "2. NICHT RATEN: Rate niemals das Betriebssystem. Nutze immer zuerst `cat /etc/os-release`.\n"
+                "3. KURZ FASSEN: Außerhalb der Gedanken-Tags nur maximal einen kurzen Satz schreiben.\n"
+                "4. Antworte auf DEUTSCH."
             )
         
         if not self.history:
@@ -364,12 +378,19 @@ class JarvisAssistant:
                 break
             
             if not response_text: break
-                
-            # JSON extrahieren
-            json_match = re.search(r"(\{.*\})", response_text, re.DOTALL)
             
-            # Sprechtext säubern
-            speech_text = re.sub(r"<(thought|think)>.*?</\1>", "", response_text, flags=re.DOTALL).strip()
+            # Markdown JSON Formatierung entfernen, falls das Modell sie trotzdem nutzt
+            clean_response = re.sub(r"```json\s*", "", response_text, flags=re.IGNORECASE)
+            clean_response = re.sub(r"```\s*$", "", clean_response).strip()
+            
+            # JSON extrahieren (nicht so gierig)
+            json_match = re.search(r"(\{\s*\"tool\":.*?\})", clean_response, re.DOTALL)
+            
+            # Sprechtext säubern (Alle Varianten von Gedanken entfernen)
+            speech_text = re.sub(r"<(thought|think)>.*?</\1>", "", clean_response, flags=re.DOTALL | re.IGNORECASE).strip()
+            speech_text = re.sub(r"<(thought|think)>.*", "", speech_text, flags=re.DOTALL | re.IGNORECASE).strip() # Offene Tags fangen
+            speech_text = re.sub(r"</(thought|think)>", "", speech_text, flags=re.IGNORECASE).strip() # Einzelne schließende Tags fangen
+            
             if json_match:
                 speech_text = speech_text.replace(json_match.group(1), "").strip()
             speech_text = re.sub(r"<[^>]+>", "", speech_text).strip()
@@ -396,11 +417,6 @@ class JarvisAssistant:
                 except:
                     break
             else:
-                # Falls die KI Text generiert hat, aber KEIN JSON (obwohl sie im <thought> geplant hat)
-                if "<thought>" in response_text or "<think>" in response_text:
-                    # Kleiner "Nudge" um das JSON zu erzwingen
-                    self.history.append({"role": "system", "content": "Bitte gib jetzt den JSON-Tool-Call aus, um fortzufahren."})
-                    continue
                 break
 
     def voice_input_worker(self):
