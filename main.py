@@ -306,9 +306,9 @@ class JarvisAssistant:
                 "{ \"tool\": \"search_web\", \"kwargs\": { \"query\": \"...\" } }\n"
                 "{ \"tool\": \"execute_command\", \"kwargs\": { \"command\": \"...\" } }\n\n"
                 "RULES:\n"
-                "1. NEVER ASK for information you are currently fetching via a tool. If you run `cat /etc/os-release`, do NOT ask the user what OS they use.\n"
-                "2. NO META-TALK: Max 1 short sentence outside thought tags. Just state what you are doing (e.g., 'Checking OS...').\n"
-                "3. ARCH LINUX: If a package like 'steam' is not found, check if [multilib] is enabled in `/etc/pacman.conf`.\n"
+                "1. STEP BY STEP: Execute ONE tool and wait for the result. Do not repeat your final goal in every step.\n"
+                "2. NO REPETITION: Only speak if you have NEW information. If you just check the OS, say 'Checking OS...'.\n"
+                "3. AUTONOMOUS: Do not ask questions you can answer via tools.\n"
                 "4. Respond in ENGLISH."
             )
         else:
@@ -329,9 +329,9 @@ class JarvisAssistant:
                 "{ \"tool\": \"search_web\", \"kwargs\": { \"query\": \"...\" } }\n"
                 "{ \"tool\": \"execute_command\", \"kwargs\": { \"command\": \"...\" } }\n\n"
                 "REGELN:\n"
-                "1. FRAGE NIEMALS nach Informationen, die du gerade selbst per Tool abrufst. Wenn du `cat /etc/os-release` ausführst, frage den Nutzer NICHT nach seinem OS.\n"
-                "2. KEIN META-TALK: Maximal 1 kurzer Satz außerhalb der Gedanken-Tags. Sag nur kurz, was du tust (z.B. 'Ich prüfe das System...').\n"
-                "3. ARCH LINUX: Wenn ein Paket wie 'steam' nicht gefunden wird, prüfe ob [multilib] in `/etc/pacman.conf` aktiviert ist.\n"
+                "1. SCHRITT FÜR SCHRITT: Führe immer nur EIN Werkzeug aus und warte auf das Ergebnis. Wiederhole nicht ständig dein Endziel.\n"
+                "2. KEINE WIEDERHOLUNG: Sprich nur, wenn du NEUE Infos hast. Wenn du nur das OS prüfst, sag nur 'Ich prüfe das System...'.\n"
+                "3. AUTONOM: Frage nicht nach Infos, die du selbst per Tool finden kannst.\n"
                 "4. Antworte auf DEUTSCH."
             )
         
@@ -341,6 +341,8 @@ class JarvisAssistant:
             self.history[0] = {"role": "system", "content": sys_prompt}
             
         self.history.append({"role": "user", "content": user_text})
+        
+        spoken_history = [] # Verhindert doppeltes Vorlesen identischer Sätze in einer Kette
         
         MAX_STEPS = 10
         for step in range(MAX_STEPS):
@@ -371,16 +373,13 @@ class JarvisAssistant:
             clean_response = re.sub(r"```json\s*", "", response_text, flags=re.IGNORECASE)
             clean_response = re.sub(r"```\s*$", "", clean_response).strip()
             
-            # Robustes JSON-Matching (Greedy, von der ersten bis zur letzten Klammer)
+            # Robustes JSON-Matching
             json_string = None
             first_brace = clean_response.find('{')
             last_brace = clean_response.rfind('}')
             
             if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
-                potential_json = clean_response[first_brace:last_brace+1]
-                # Wir validieren das JSON später mit json.loads
-                json_string = potential_json
-                # Sprechtext ist alles VOR dem JSON (minus Gedanken)
+                json_string = clean_response[first_brace:last_brace+1]
                 speech_source = clean_response[:first_brace].strip()
             else:
                 speech_source = clean_response
@@ -391,23 +390,22 @@ class JarvisAssistant:
             speech_text = re.sub(r"</(thought|think)>", "", speech_text, flags=re.IGNORECASE).strip()
             speech_text = re.sub(r"<[^>]+>", "", speech_text).strip()
 
-            # Nur vorlesen, wenn es echte Buchstaben enthält (verhindert wave.Error bei Piper)
+            # Nur vorlesen, wenn es Text gibt, Buchstaben enthält und noch NICHT gesagt wurde
             if speech_text and re.search(r'[a-zA-ZäöüßÄÖÜ]', speech_text):
-                self.log(f"[{self.ollama_model}]: {speech_text}", "standard")
-                self.speak_with_interrupt(speech_text)
-                if self.interrupted_by_wakeword: break
+                if speech_text not in spoken_history:
+                    self.log(f"[{self.ollama_model}]: {speech_text}", "standard")
+                    self.speak_with_interrupt(speech_text)
+                    spoken_history.append(speech_text)
+                    if self.interrupted_by_wakeword: break
             
             self.history.append({"role": "assistant", "content": response_text})
             
             if json_string:
                 try:
-                    # Versuche das gefundene JSON zu parsen
-                    # Falls es am Ende Müll hat (wie Qwen es oft macht), versuchen wir es zu fixen
                     data = None
                     try:
                         data = json.loads(json_string)
                     except:
-                        # Fallback: Versuche die letzte Klammer zu finden, die ein valides JSON ergibt
                         temp_json = json_string
                         while temp_json.rfind('}') != -1:
                             temp_json = temp_json[:temp_json.rfind('}')+1]
