@@ -358,11 +358,9 @@ class JarvisAssistant:
             
             try:
                 full_response = ""
-                # Header nur im Debug anzeigen
                 if self.view_mode == "debug":
                     print(f"[{self.ollama_model}]: ", end="", flush=True)
                 
-                # STREAMING
                 for chunk in ollama.chat(model=self.ollama_model, messages=self.history, stream=True):
                     if self.interrupted_by_wakeword: break
                     token = chunk['message']['content']
@@ -379,38 +377,60 @@ class JarvisAssistant:
             
             if not response_text: break
             
-            # Markdown JSON Formatierung entfernen, falls das Modell sie trotzdem nutzt
+            # Markdown JSON Formatierung entfernen
             clean_response = re.sub(r"```json\s*", "", response_text, flags=re.IGNORECASE)
             clean_response = re.sub(r"```\s*$", "", clean_response).strip()
             
-            # JSON extrahieren (nicht so gierig)
-            json_match = re.search(r"(\{\s*\"tool\":.*?\})", clean_response, re.DOTALL)
+            # Robustes JSON-Matching (Greedy, von der ersten bis zur letzten Klammer)
+            json_string = None
+            first_brace = clean_response.find('{')
+            last_brace = clean_response.rfind('}')
             
-            # Sprechtext säubern (Alle Varianten von Gedanken entfernen)
-            speech_text = re.sub(r"<(thought|think)>.*?</\1>", "", clean_response, flags=re.DOTALL | re.IGNORECASE).strip()
-            speech_text = re.sub(r"<(thought|think)>.*", "", speech_text, flags=re.DOTALL | re.IGNORECASE).strip() # Offene Tags fangen
-            speech_text = re.sub(r"</(thought|think)>", "", speech_text, flags=re.IGNORECASE).strip() # Einzelne schließende Tags fangen
-            
-            if json_match:
-                speech_text = speech_text.replace(json_match.group(1), "").strip()
+            if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
+                potential_json = clean_response[first_brace:last_brace+1]
+                # Wir validieren das JSON später mit json.loads
+                json_string = potential_json
+                # Sprechtext ist alles VOR dem JSON (minus Gedanken)
+                speech_source = clean_response[:first_brace].strip()
+            else:
+                speech_source = clean_response
+
+            # Gedanken-Tags entfernen
+            speech_text = re.sub(r"<(thought|think)>.*?</\1>", "", speech_source, flags=re.DOTALL | re.IGNORECASE).strip()
+            speech_text = re.sub(r"<(thought|think)>.*", "", speech_text, flags=re.DOTALL | re.IGNORECASE).strip()
+            speech_text = re.sub(r"</(thought|think)>", "", speech_text, flags=re.IGNORECASE).strip()
             speech_text = re.sub(r"<[^>]+>", "", speech_text).strip()
 
-            # Nur loggen/sprechen, wenn es Text gibt
-            if speech_text:
+            # Nur vorlesen, wenn es echte Buchstaben enthält (verhindert wave.Error bei Piper)
+            if speech_text and re.search(r'[a-zA-ZäöüßÄÖÜ]', speech_text):
                 self.log(f"[{self.ollama_model}]: {speech_text}", "standard")
                 self.speak_with_interrupt(speech_text)
                 if self.interrupted_by_wakeword: break
             
             self.history.append({"role": "assistant", "content": response_text})
             
-            if json_match:
-                json_string = json_match.group(1)
+            if json_string:
                 try:
-                    data = json.loads(json_string)
-                    tool_name = data.get('tool')
-                    if tool_name:
+                    # Versuche das gefundene JSON zu parsen
+                    # Falls es am Ende Müll hat (wie Qwen es oft macht), versuchen wir es zu fixen
+                    data = None
+                    try:
+                        data = json.loads(json_string)
+                    except:
+                        # Fallback: Versuche die letzte Klammer zu finden, die ein valides JSON ergibt
+                        temp_json = json_string
+                        while temp_json.rfind('}') != -1:
+                            temp_json = temp_json[:temp_json.rfind('}')+1]
+                            try:
+                                data = json.loads(temp_json)
+                                break
+                            except:
+                                temp_json = temp_json[:-1]
+                    
+                    if data and data.get('tool'):
+                        tool_name = data.get('tool')
                         print(f">>>> [JARVIS]: Nutze '{tool_name}'...")
-                        tool_result = parse_and_execute_tool(json_string)
+                        tool_result = parse_and_execute_tool(json.dumps(data))
                         self.history.append({"role": "system", "content": f"Tool Ergebnis:\n{tool_result}"})
                     else:
                         break
