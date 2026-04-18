@@ -228,8 +228,11 @@ class JarvisGUI(QWidget):
 
     def process_text_input(self):
         t = self.input_f.text().strip()
-        if t: self.display_text("User", t); self.input_f.clear()
-        if hasattr(self, 'at'): threading.Thread(target=self.at.assistant.run_ollama_agent, args=(t,), daemon=True).start()
+        if t: 
+            self.display_text("User", t)
+            self.input_f.clear()
+            if hasattr(self, 'at'):
+                threading.Thread(target=self.at.assistant.run_ollama_agent, args=(t,), daemon=True).start()
     def closeEvent(self, event):
         if hasattr(self, 'at'): self.at.terminate(); self.at.wait()
         os.killpg(0, 9); event.accept()
