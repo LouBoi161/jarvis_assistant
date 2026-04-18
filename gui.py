@@ -142,15 +142,23 @@ class JarvisGUI(QWidget):
         elif sender == "System":
              self.status_label.setText(text.upper()[:30])
 
-    def process_text_input(self):
-        text = self.input_field.text()
-        if text:
-            self.output_label.setText(f"User: {text}")
-            self.input_field.clear()
-            # Hier müssten wir den Text an den Assistant übergeben
-            # Wir bauen das gleich in den AssistantThread ein
-            if hasattr(self, 'at'):
-                self.at.assistant.run_ollama_agent(text)
+    def closeEvent(self, event):
+        """Wird aufgerufen, wenn das Fenster geschlossen wird."""
+        print("[SYSTEM]: Beende Jarvis GUI...")
+        if hasattr(self, 'at'):
+            # Versuche den Thread sauber zu beenden
+            self.at.terminate()
+            self.at.wait()
+        
+        # Sicherstellen, dass keine Terminal-Prozesse hängen
+        import os
+        import signal
+        try:
+            # Beende alle Python-Subprozesse in dieser Gruppe
+            os.killpg(0, signal.SIGKILL)
+        except:
+            pass
+        event.accept()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
