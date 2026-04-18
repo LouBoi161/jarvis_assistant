@@ -268,11 +268,13 @@ def execute_command(command: str) -> str:
         if os.path.exists("/var/lib/pacman/db.lck"):
             return "FEHLER: Der Paketmanager ist blockiert (/var/lib/pacman/db.lck existiert). Ein anderer Prozess (oder ein abgestürzter Jarvis-Prozess) nutzt gerade pacman. Bitte warte kurz oder lösche die Sperrdatei."
 
-    cmd_parts = command.split()
+    # Verfeinerte Erkennung: Nur echte Aktionen oder sudo sind interaktiv
+    interactive_keywords = ["sudo", "install", "update", "upgrade", "-S", "-R", "-U", "-y", "paru", "apt"]
+    is_interactive = any(k in command.lower() for k in interactive_keywords)
     
-    # Prüfe ob es ein interaktiver Befehl ist
-    interactive_commands = ["sudo", "pacman", "yay", "paru", "apt"]
-    is_interactive = any(cmd in cmd_parts for cmd in interactive_commands)
+    # Aber reine Abfragen (Query) sind NICHT interaktiv
+    if "-Q" in command or "-Si" in command or "-Ss" in command:
+        is_interactive = False
     
     if is_interactive:
         try:
@@ -282,9 +284,9 @@ def execute_command(command: str) -> str:
         except Exception as e:
             return f"Fehler beim Starten des interaktiven Befehls: {e}"
     else:
-        # Normaler Konsolenbefehl
+        # Normaler Konsolenbefehl (schneller und blockiert nicht bei Abfragen)
         try:
-            result = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=30)
+            result = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=15)
             output = filter_noise(result.stdout.strip())
             error = filter_noise(result.stderr.strip())
             if output: return output
