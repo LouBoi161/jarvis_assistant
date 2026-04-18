@@ -32,8 +32,11 @@ class AssistantThread(QThread):
                 self.text_received.emit(sender, text)
             elif "[" in message and "]" in message:
                 sender = "Jarvis"
-                text = message.split("]")[1].strip()
-                self.text_received.emit(sender, text)
+                # Entferne den Präfix [Modell]: und säubere den Text
+                parts = message.split("]", 1)
+                if len(parts) > 1:
+                    text = parts[1].strip().lstrip(":").strip()
+                    self.text_received.emit(sender, text)
             else:
                 self.text_received.emit("System", message)
 
