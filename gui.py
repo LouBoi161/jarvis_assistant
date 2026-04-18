@@ -17,7 +17,7 @@ import ollama
 
 class AssistantThread(QThread):
     status_changed = pyqtSignal(str) 
-    text_received = pyqtSignal(str, str)
+    text_received = pyqtSignal(str, str) # sender, text
     
     def __init__(self, assistant):
         super().__init__()
@@ -30,13 +30,18 @@ class AssistantThread(QThread):
                 sender = "User"
                 parts = message.split("):")
                 text = parts[1].strip() if len(parts) > 1 else ""
-                if text: self.text_received.emit(sender, text)
-            elif "[" in message and "]" in message:
+                self.text_received.emit(sender, text)
+            elif "[Jarvis]" in message:
                 sender = "Jarvis"
                 parts = message.split("]", 1)
                 text = parts[1].strip().lstrip(":").strip() if len(parts) > 1 else ""
-                if text: self.text_received.emit(sender, text)
+                self.text_received.emit(sender, text)
+            elif "TOOL:" in message:
+                sender = "Tool"
+                text = message.replace("TOOL:", "").strip()
+                self.text_received.emit(sender, text)
             else:
+                # Sonstige Systemmeldungen
                 self.text_received.emit("System", message)
 
     def run(self):
@@ -47,18 +52,41 @@ class ChatBubble(QFrame):
         super().__init__()
         layout = QVBoxLayout(self)
         self.setContentsMargins(15, 10, 15, 10)
+        
         is_jarvis = (sender == "Jarvis")
-        bg_color = "rgba(0, 212, 255, 20)" if is_jarvis else "rgba(255, 255, 255, 8)"
-        border_color = "#00d4ff" if is_jarvis else "#444"
-        self.sender_label = QLabel(sender.upper())
-        self.sender_label.setStyleSheet(f"color: {border_color}; font-size: 10px; font-weight: bold; background: transparent; border: none;")
+        is_tool = (sender == "Tool")
+        
+        if is_tool:
+            bg_color = "rgba(0, 0, 0, 50)"
+            border_color = "rgba(0, 212, 255, 50)"
+            text_color = "#888"
+            font_style = "italic"
+            font_size = "12px"
+        elif is_jarvis:
+            bg_color = "rgba(0, 212, 255, 20)"
+            border_color = "#00d4ff"
+            text_color = "#e0e0e0"
+            font_style = "normal"
+            font_size = "14px"
+        else: # User
+            bg_color = "rgba(255, 255, 255, 8)"
+            border_color = "#444"
+            text_color = "#e0e0e0"
+            font_style = "normal"
+            font_size = "14px"
+        
+        if not is_tool:
+            self.sender_label = QLabel(sender.upper())
+            self.sender_label.setStyleSheet(f"color: {border_color}; font-size: 10px; font-weight: bold; background: transparent; border: none;")
+            layout.addWidget(self.sender_label)
+        
         self.text_label = QLabel(text)
         self.text_label.setWordWrap(True)
-        self.text_label.setStyleSheet("color: #e0e0e0; font-size: 14px; background: transparent; border: none;")
+        self.text_label.setStyleSheet(f"color: {text_color}; font-size: {font_size}; font-style: {font_style}; background: transparent; border: none;")
         self.text_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        layout.addWidget(self.sender_label)
+        
         layout.addWidget(self.text_label)
-        self.setStyleSheet(f"background-color: {bg_color}; border: 1px solid {border_color}; border-radius: 15px; margin: 5px;")
+        self.setStyleSheet(f"background-color: {bg_color}; border: 1px solid {border_color}; border-radius: 12px; margin: 5px;")
 
 class CustomTitleBar(QFrame):
     def __init__(self, parent):
@@ -80,11 +108,7 @@ class CustomTitleBar(QFrame):
         self.btn_min.clicked.connect(self.parent.showMinimized)
         self.btn_max.clicked.connect(self.toggle_maximize)
         self.btn_close.clicked.connect(self.parent.close)
-        layout.addWidget(self.title)
-        layout.addStretch()
-        layout.addWidget(self.btn_min)
-        layout.addWidget(self.btn_max)
-        layout.addWidget(self.btn_close)
+        layout.addWidget(self.title); layout.addStretch(); layout.addWidget(self.btn_min); layout.addWidget(self.btn_max); layout.addWidget(self.btn_close)
 
     def toggle_maximize(self):
         if self.parent.isMaximized(): self.parent.showNormal(); self.btn_max.setText("◻")
@@ -126,8 +150,7 @@ class JarvisGUI(QWidget):
             btn.setStyleSheet("QPushButton { background: #11151c; color: #555; font-size: 30px; border: 1px solid #222; border-radius: 15px; margin-bottom: 25px; } QPushButton:hover { color: #00d4ff; background: #1a1f29; border: 1px solid #00d4ff; } QPushButton:checked { color: #0b0e14; background: #00d4ff; border: 1px solid #00d4ff; }")
         self.btn_chat.setChecked(True); self.btn_chat.clicked.connect(lambda: self.switch_page(0))
         self.btn_settings.clicked.connect(lambda: self.switch_page(1))
-        sidebar_layout.addWidget(self.btn_chat); sidebar_layout.addWidget(self.btn_settings)
-        self.content_container.addWidget(self.sidebar)
+        sidebar_layout.addWidget(self.btn_chat); sidebar_layout.addWidget(self.btn_settings); self.content_container.addWidget(self.sidebar)
         self.stack = QStackedWidget()
         self.chat_page = QWidget(); chat_l = QVBoxLayout(self.chat_page); chat_l.setContentsMargins(0, 0, 0, 0)
         self.status_bar = QFrame(); self.status_bar.setFixedHeight(55); self.status_bar.setStyleSheet("background-color: #0b0e14; border-bottom: 1px solid #1a1f29;")
@@ -147,9 +170,7 @@ class JarvisGUI(QWidget):
         self.add_setting_group(self.set_scroll_l, "SYSTEM-BERECHTIGUNGEN", self.init_system_settings())
         self.save_b = QPushButton("EINSTELLUNGEN ÜBERNEHMEN"); self.save_b.setFixedHeight(65); self.save_b.setCursor(Qt.PointingHandCursor); self.save_b.setStyleSheet("QPushButton { background: #00d4ff; color: #0b0e14; font-weight: bold; font-size: 15px; border-radius: 12px; margin-top: 20px; } QPushButton:hover { background: #00b8e6; }")
         self.save_b.clicked.connect(self.save_settings); self.set_scroll_l.addWidget(self.save_b); self.set_scroll.setWidget(self.set_scroll_content); self.set_scroll.setWidgetResizable(True); set_l.addWidget(self.set_scroll); self.stack.addWidget(self.settings_page)
-        self.content_container.addWidget(self.stack); self.layout.addLayout(self.content_container)
-        self.sizegrip = QSizeGrip(self); self.layout.addWidget(self.sizegrip, 0, Qt.AlignBottom | Qt.AlignRight)
-        self.load_settings_into_ui()
+        self.content_container.addWidget(self.stack); self.layout.addLayout(self.content_container); self.sizegrip = QSizeGrip(self); self.layout.addWidget(self.sizegrip, 0, Qt.AlignBottom | Qt.AlignRight); self.load_settings_into_ui()
     def add_setting_group(self, parent_layout, title, widget):
         group = QFrame(); group.setStyleSheet("background: #0f131a; border-radius: 15px; padding: 30px; border: 2px solid #1a1f29;"); l = QVBoxLayout(group); t = QLabel(title); t.setStyleSheet("color: #666; font-size: 11px; font-weight: bold; margin-bottom: 15px; border: none; letter-spacing: 1px;"); l.addWidget(t); l.addWidget(widget); parent_layout.addWidget(group)
     def init_model_settings(self):
