@@ -6,23 +6,9 @@ import shutil
 import sys
 import ollama
 import os
+import time
+import signal
 from PyQt5.QtWidgets import QApplication, QInputDialog, QLineEdit, QComboBox, QVBoxLayout, QDialog, QPushButton, QLabel, QCheckBox
-
-# Globale Variable für persistente Shell-Sitzung
-active_process = None
-CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
-VOICES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "voices")
-
-def get_security_mode():
-    """Liest den Sicherheitsmodus direkt aus der Config."""
-    try:
-        if os.path.exists(CONFIG_FILE):
-            with open(CONFIG_FILE, "r") as f:
-                return json.load(f).get("security_mode", True)
-    except:
-        pass
-    return True
-
 from multiprocessing import Process, Queue
 
 def _gui_worker(queue, func_name, *args, **kwargs):
@@ -216,14 +202,14 @@ def get_gui_password():
 
 def _get_gui_password_logic():
     """Die eigentliche Logik der Passwort-Abfrage."""
-    pwd, ok = QInputDialog.getText(
-        None, 
-        "Jarvis Sicherheit", 
-        "Ein Programm (z.B. sudo/yay) fordert dein Passwort an:", 
-        QLineEdit.Password
-    )
-    if ok and pwd:
-        return pwd
+    dialog = QInputDialog()
+    dialog.setWindowTitle("Jarvis Sicherheit")
+    dialog.setLabelText("Ein Programm (z.B. sudo/yay) fordert dein Passwort an:")
+    dialog.setTextEchoMode(QLineEdit.Password)
+    dialog.setWindowFlags(dialog.windowFlags() | Qt.WindowStaysOnTopHint)
+    
+    if dialog.exec_() == QDialog.Accepted:
+        return dialog.textValue()
     return ""
 
 def search_web(query: str, max_results: int = 3) -> str:
@@ -418,6 +404,18 @@ def write_file(file_path: str, content: str) -> str:
     except Exception as e:
         return f"Fehler beim Schreiben der Datei: {e}"
 
+def take_screenshot() -> str:
+    """Macht einen Screenshot vom gesamten Bildschirm und speichert ihn im Home-Verzeichnis."""
+    import time
+    print("[Tool Execution] Erstelle Screenshot...")
+    try:
+        filename = f"screenshot_{time.strftime('%Y%m%d_%H%M%S')}.png"
+        path = os.path.expanduser(f"~/{filename}")
+        subprocess.run(f"scrot '{path}'", shell=True, check=True)
+        return f"Screenshot wurde erfolgreich als '{filename}' im Home-Verzeichnis gespeichert."
+    except Exception as e:
+        return f"Fehler beim Erstellen des Screenshots: {e}. Stelle sicher, dass 'scrot' installiert ist."
+
 def parse_and_execute_tool(json_string: str) -> str:
     """Parst die JSON-Antwort von Gemma und führt das entsprechende Tool aus."""
     try:
@@ -431,6 +429,8 @@ def parse_and_execute_tool(json_string: str) -> str:
             return execute_command(**kwargs)
         elif tool_name == "write_file":
             return write_file(**kwargs)
+        elif tool_name == "take_screenshot":
+            return take_screenshot()
         elif tool_name == "send_input":
             return send_input(**kwargs)
         elif tool_name == "manage_jarvis_gui":
