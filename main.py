@@ -172,6 +172,10 @@ class JarvisAssistant:
                 speech_text = response_text[:f_brace].strip()
             else: speech_text = response_text
 
+            # Markdown Code-Blöcke aus der Sprache entfernen
+            speech_text = re.sub(r"```json\s*", "", speech_text, flags=re.IGNORECASE)
+            speech_text = re.sub(r"```\s*", "", speech_text).strip()
+
             speech_text = re.sub(r"<(thought|think)>.*?</\1>", "", speech_text, flags=re.DOTALL | re.IGNORECASE).strip()
             speech_text = re.sub(r"<(thought|think)>.*", "", speech_text, flags=re.DOTALL | re.IGNORECASE).strip()
             speech_text = re.sub(r"<[^>]+>", "", speech_text).strip()
