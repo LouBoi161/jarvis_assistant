@@ -142,7 +142,8 @@ class JarvisAssistant:
             "TOOLS:\n"
             "{ \"tool\": \"get_system_info\", \"kwargs\": {} }\n"
             "{ \"tool\": \"search_web\", \"kwargs\": { \"query\": \"...\" } }\n"
-            "{ \"tool\": \"execute_command\", \"kwargs\": { \"command\": \"...\" } }"
+            "{ \"tool\": \"execute_command\", \"kwargs\": { \"command\": \"...\" } }\n"
+            "{ \"tool\": \"write_file\", \"kwargs\": { \"file_path\": \"...\", \"content\": \"...\" } }"
         )
 
         if not self.history: self.history.append({"role": "system", "content": sys_prompt})
@@ -190,8 +191,21 @@ class JarvisAssistant:
                     data = json.loads(json_string)
                     if data.get('tool'):
                         tool_name = data.get('tool')
-                        # Spezial-Log für GUI Visualisierung
-                        self.log(f"TOOL: Nutze {tool_name}...", "standard")
+                        tool_kwargs = data.get('kwargs', {})
+                        
+                        # Detailreiche Statusmeldung für die GUI mit Icons
+                        if tool_name == "search_web":
+                            display_msg = f"TOOL: 🔍 Suche im Web nach: '{tool_kwargs.get('query', '...')}'"
+                        elif tool_name == "execute_command":
+                            display_msg = f"TOOL: 💻 Führe Befehl aus: `{tool_kwargs.get('command', '...')}`"
+                        elif tool_name == "get_system_info":
+                            display_msg = f"TOOL: 🛡️ Analysiere System-Konfiguration..."
+                        elif tool_name == "write_file":
+                            display_msg = f"TOOL: 📝 Schreibe Datei: `{tool_kwargs.get('file_path', '...')}`"
+                        else:
+                            display_msg = f"TOOL: ⚙️ Nutze {tool_name}..."
+                            
+                        self.log(display_msg, "standard")
                         
                         tool_result = parse_and_execute_tool(json.dumps(data))
                         if not tool_result: tool_result = "Done."

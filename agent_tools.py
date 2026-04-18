@@ -403,6 +403,21 @@ def get_system_info() -> str:
     except Exception as e:
         return f"Fehler beim Abrufen der System-Infos: {e}"
 
+def write_file(file_path: str, content: str) -> str:
+    """Erstellt oder überschreibt eine Datei mit dem angegebenen Inhalt (sicher)."""
+    print(f"[Tool Execution] Schreibe Datei: '{file_path}'")
+    try:
+        # Pfad expandieren (z.B. ~)
+        full_path = os.path.expanduser(file_path)
+        # Ordner erstellen falls nicht existent
+        os.makedirs(os.path.dirname(full_path), exist_ok=True)
+        
+        with open(full_path, "w", encoding="utf-8") as f:
+            f.write(content)
+        return f"Datei '{file_path}' wurde erfolgreich gespeichert ({len(content)} Zeichen)."
+    except Exception as e:
+        return f"Fehler beim Schreiben der Datei: {e}"
+
 def parse_and_execute_tool(json_string: str) -> str:
     """Parst die JSON-Antwort von Gemma und führt das entsprechende Tool aus."""
     try:
@@ -414,6 +429,8 @@ def parse_and_execute_tool(json_string: str) -> str:
             return search_web(**kwargs)
         elif tool_name == "execute_command":
             return execute_command(**kwargs)
+        elif tool_name == "write_file":
+            return write_file(**kwargs)
         elif tool_name == "send_input":
             return send_input(**kwargs)
         elif tool_name == "manage_jarvis_gui":

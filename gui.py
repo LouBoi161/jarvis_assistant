@@ -8,7 +8,7 @@ from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout,
                              QLabel, QLineEdit, QFrame, QGraphicsDropShadowEffect,
                              QPushButton, QScrollArea, QStackedWidget, QSizePolicy,
                              QCheckBox, QComboBox, QSpacerItem, QSizeGrip)
-from PyQt5.QtCore import Qt, pyqtSignal, QPropertyAnimation, QEasingCurve, QThread, QPoint, QSize
+from PyQt5.QtCore import Qt, pyqtSignal, QPropertyAnimation, QEasingCurve, QThread, QPoint, QSize, QTimer
 from PyQt5.QtGui import QColor, QFont, QIcon, QPainter, QCursor, QWindow
 
 # Importiere den bestehenden Assistant
@@ -17,7 +17,7 @@ import ollama
 
 class AssistantThread(QThread):
     status_changed = pyqtSignal(str) 
-    text_received = pyqtSignal(str, str) # sender, text
+    text_received = pyqtSignal(str, str)
     
     def __init__(self, assistant):
         super().__init__()
@@ -30,26 +30,27 @@ class AssistantThread(QThread):
                 sender = "User"
                 parts = message.split("):")
                 text = parts[1].strip() if len(parts) > 1 else ""
-                self.text_received.emit(sender, text)
+                if text: self.text_received.emit(sender, text)
             elif "[Jarvis]" in message:
                 sender = "Jarvis"
                 parts = message.split("]", 1)
                 text = parts[1].strip().lstrip(":").strip() if len(parts) > 1 else ""
-                self.text_received.emit(sender, text)
+                if text: self.text_received.emit(sender, text)
             elif "TOOL:" in message:
                 sender = "Tool"
                 text = message.replace("TOOL:", "").strip()
                 self.text_received.emit(sender, text)
             else:
-                # Sonstige Systemmeldungen
                 self.text_received.emit("System", message)
 
     def run(self):
         self.assistant.run_voice_only()
 
 class ChatBubble(QFrame):
-    def __init__(self, sender, text):
+    def __init__(self, sender, text, is_temporary=False):
         super().__init__()
+        self.sender = sender
+        self.is_temporary = is_temporary
         layout = QVBoxLayout(self)
         self.setContentsMargins(15, 10, 15, 10)
         
@@ -57,9 +58,9 @@ class ChatBubble(QFrame):
         is_tool = (sender == "Tool")
         
         if is_tool:
-            bg_color = "rgba(0, 0, 0, 50)"
-            border_color = "rgba(0, 212, 255, 50)"
-            text_color = "#888"
+            bg_color = "rgba(0, 212, 255, 15)"
+            border_color = "rgba(0, 212, 255, 30)"
+            text_color = "#00d4ff"
             font_style = "italic"
             font_size = "12px"
         elif is_jarvis:
@@ -96,7 +97,7 @@ class CustomTitleBar(QFrame):
         self.setStyleSheet("background-color: #07090d; border-bottom: 1px solid #1a1f29;")
         layout = QHBoxLayout(self)
         layout.setContentsMargins(15, 0, 5, 0)
-        self.title = QLabel("JARVIS v2.2")
+        self.title = QLabel("JARVIS v2.3")
         self.title.setStyleSheet("color: #00d4ff; font-weight: bold; font-size: 12px; letter-spacing: 2px; border: none;")
         self.btn_min = QPushButton("─")
         self.btn_max = QPushButton("◻")
@@ -109,7 +110,6 @@ class CustomTitleBar(QFrame):
         self.btn_max.clicked.connect(self.toggle_maximize)
         self.btn_close.clicked.connect(self.parent.close)
         layout.addWidget(self.title); layout.addStretch(); layout.addWidget(self.btn_min); layout.addWidget(self.btn_max); layout.addWidget(self.btn_close)
-
     def toggle_maximize(self):
         if self.parent.isMaximized(): self.parent.showNormal(); self.btn_max.setText("◻")
         else: self.parent.showMaximized(); self.btn_max.setText("❐")
@@ -120,6 +120,7 @@ class JarvisGUI(QWidget):
     def __init__(self, assistant):
         super().__init__()
         self.assistant = assistant
+        self.temp_tool_bubbles = []
         self.init_ui()
     def init_ui(self):
         self.setWindowFlags(Qt.FramelessWindowHint)
@@ -128,7 +129,7 @@ class JarvisGUI(QWidget):
             QWidget { background-color: #0b0e14; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; }
             QComboBox { background-color: #1a1f29; border: 2px solid #333; border-radius: 8px; padding: 10px; color: white; font-size: 14px; combobox-popup: 0; }
             QComboBox:hover { border: 2px solid #00d4ff; }
-            QComboBox QAbstractItemView { background-color: #1a1f29; border: 2px solid #00d4ff; selection-background-color: #00d4ff; selection-color: #0b0e14; color: #e0e0e0; outline: none; }
+            QComboBox QAbstractItemView { background-color: #1a1f29; border: 2px solid #333; border: 1px solid #00d4ff; selection-background-color: #00d4ff; selection-color: #0b0e14; color: #e0e0e0; outline: none; }
             QLineEdit { background-color: #1a1f29; border: 2px solid #333; border-radius: 8px; padding: 12px; color: white; font-size: 14px; }
             QLineEdit:focus { border: 2px solid #00d4ff; }
             QCheckBox { spacing: 12px; font-size: 14px; }
@@ -211,8 +212,20 @@ class JarvisGUI(QWidget):
         c, t = m.get(status, m["idle"])
         self.status_dot.setStyleSheet(f"color: {c}; font-size: 20px; margin-left: 20px;"); self.status_text.setText(t); self.status_text.setStyleSheet(f"font-weight: bold; color: {c}; font-size: 13px;")
     def display_text(self, sender, text):
-        b = ChatBubble(sender, text); self.scroll_l.addWidget(b)
-        threading.Timer(0.1, lambda: self.scroll.verticalScrollBar().setValue(self.scroll.verticalScrollBar().maximum())).start()
+        if sender == "Jarvis":
+            # Lösche alle temporären Tool-Bubbles wenn Jarvis die endgültige Antwort gibt
+            for bubble in self.temp_tool_bubbles:
+                bubble.hide()
+                self.scroll_l.removeWidget(bubble)
+            self.temp_tool_bubbles.clear()
+        
+        is_temp = (sender == "Tool")
+        bubble = ChatBubble(sender, text, is_temporary=is_temp)
+        if is_temp: self.temp_tool_bubbles.append(bubble)
+        
+        self.scroll_l.addWidget(bubble)
+        QTimer.singleShot(100, lambda: self.scroll.verticalScrollBar().setValue(self.scroll.verticalScrollBar().maximum()))
+
     def process_text_input(self):
         t = self.input_f.text().strip()
         if t: self.display_text("User", t); self.input_f.clear()
