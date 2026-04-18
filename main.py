@@ -22,10 +22,15 @@ logging.getLogger("transformers").setLevel(logging.ERROR)
 logging.getLogger("httpx").setLevel(logging.ERROR) # Ollama nutzt httpx
 # Globale Standard-Konfiguration
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
+LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "latest_session.log")
 WHISPER_MODEL = "base"
 
 class JarvisAssistant:
     def __init__(self):
+        # Initialisiere Session-Log (überschreiben)
+        with open(LOG_FILE, "w", encoding="utf-8") as f:
+            f.write(f"--- JARVIS SESSION LOG START ({time.strftime('%Y-%m-%d %H:%M:%S')}) ---\n")
+
         # Standard-Werte
         self.view_mode = "standard"
         self.ollama_model = None
@@ -75,9 +80,16 @@ class JarvisAssistant:
         self.tts = TTSEngine(config=config, use_gpu=True, stt_model=self.stt_model)
 
     def log(self, message, level="debug"):
-        """Filtert Ausgaben basierend auf dem view_mode."""
+        """Filtert Ausgaben basierend auf dem view_mode und schreibt ins Session-Log."""
         if not message: return
         
+        # In Log-Datei schreiben
+        try:
+            with open(LOG_FILE, "a", encoding="utf-8") as f:
+                ts = time.strftime("%H:%M:%S")
+                f.write(f"[{ts}] [{level.upper()}] {message}\n")
+        except: pass
+
         if self.view_mode == "standard":
             if level == "standard":
                 # Säuberung für die Konsole
@@ -459,8 +471,14 @@ class JarvisAssistant:
                     
                     if data and data.get('tool'):
                         tool_name = data.get('tool')
+                        tool_kwargs = data.get('kwargs', {})
+                        self.log(f"TOOL CALL: {tool_name} ({tool_kwargs})", "debug")
                         print(f">>>> [JARVIS]: Nutze '{tool_name}'...")
                         tool_result = parse_and_execute_tool(json.dumps(data))
+                        
+                        # Fallback falls Tool-Result leer ist
+                        if not tool_result: tool_result = "Keine Rückgabe vom Tool."
+                        self.log(f"TOOL RESULT ({tool_name}): {tool_result}", "debug")
                         
                         # Output kürzen, falls zu lang (max 3000 Zeichen für LLM Kontext)
                         if tool_result and len(tool_result) > 3000:
