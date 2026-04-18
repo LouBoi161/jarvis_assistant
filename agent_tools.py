@@ -378,6 +378,34 @@ def read_process_output() -> str:
         except Exception as e:
             return full_output + f"\n[Fehler beim Lesen des Outputs: {e}]"
 
+def get_system_info() -> str:
+    """Gibt Informationen über das Betriebssystem und die Hardware zurück (sicher)."""
+    import platform
+    import os
+    
+    try:
+        # Versuche detaillierte Linux-Distro Info zu bekommen
+        distro_info = "Unbekannte Linux-Distribution"
+        if os.path.exists("/etc/os-release"):
+            with open("/etc/os-release", "r") as f:
+                for line in f:
+                    if line.startswith("PRETTY_NAME="):
+                        distro_info = line.split("=")[1].strip().strip('"')
+                        break
+        
+        info = {
+            "os": platform.system(),
+            "distro": distro_info,
+            "kernel": platform.release(),
+            "arch": platform.machine(),
+            "cpu": platform.processor(),
+            "shell": os.environ.get("SHELL", "Unbekannt"),
+            "user": os.environ.get("USER", "louis")
+        }
+        return json.dumps(info, indent=4, ensure_ascii=False)
+    except Exception as e:
+        return f"Fehler beim Abrufen der System-Infos: {e}"
+
 def parse_and_execute_tool(json_string: str) -> str:
     """Parst die JSON-Antwort von Gemma und führt das entsprechende Tool aus."""
     try:
@@ -392,8 +420,9 @@ def parse_and_execute_tool(json_string: str) -> str:
         elif tool_name == "send_input":
             return send_input(**kwargs)
         elif tool_name == "manage_jarvis_gui":
-            # Pass die gesamte config an die GUI an
             return manage_jarvis_gui(kwargs)
+        elif tool_name == "get_system_info":
+            return get_system_info()
         else:
             return f"Unbekanntes Tool: {tool_name}"
     except json.JSONDecodeError:

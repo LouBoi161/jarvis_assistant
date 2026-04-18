@@ -297,18 +297,20 @@ class JarvisAssistant:
                 security_info = "\nSECURITY: DISABLED. FULL SYSTEM ACCESS."
 
             sys_prompt = (
-                "You are Jarvis, a highly autonomous AI agent.\n"
+                "You are Jarvis, a highly autonomous AI agent running on Linux.\n"
                 f"{security_info}\n\n"
                 "INTERNAL THOUGHTS:\n"
-                "CRITICAL: Put ALL planning/reasoning inside `<thought>...</thought>` or `<think>...</think>` tags.\n\n"
+                "CRITICAL: Put ALL planning/reasoning inside `<thought>...</thought>` or `<think>...</think>` tags.\n"
+                "The user will NOT hear what is inside these tags. Use them for your internal monologue.\n\n"
                 "TOOLS:\n"
                 "To use a tool, output exactly ONE JSON block at the VERY END of your response. No markdown (```).\n"
                 "{ \"tool\": \"search_web\", \"kwargs\": { \"query\": \"...\" } }\n"
-                "{ \"tool\": \"execute_command\", \"kwargs\": { \"command\": \"...\" } }\n\n"
+                "{ \"tool\": \"execute_command\", \"kwargs\": { \"command\": \"...\" } }\n"
+                "{ \"tool\": \"get_system_info\", \"kwargs\": {} }\n\n"
                 "RULES:\n"
                 "1. STEP BY STEP: Execute ONE tool and wait for the result. Do not repeat your final goal in every step.\n"
                 "2. NO REPETITION: Only speak if you have NEW information. If you just check the OS, say 'Checking OS...'.\n"
-                "3. AUTONOMOUS: Do not ask questions you can answer via tools.\n"
+                "3. AUTONOMOUS: Do not ask questions you can answer via tools. Use 'get_system_info' to identify the OS.\n"
                 "4. Respond in ENGLISH."
             )
         else:
@@ -320,18 +322,20 @@ class JarvisAssistant:
                 security_info = "\nSICHERHEIT: DEAKTIVIERT. VOLLZUGRIFF."
 
             sys_prompt = (
-                "Du bist Jarvis, ein hochgradig autonomer KI-Agent.\n"
+                "Du bist Jarvis, ein hochgradig autonomer KI-Agent, der auf Linux läuft.\n"
                 f"{security_info}\n\n"
                 "INTERNES DENKEN:\n"
-                "WICHTIG: Schreibe ALLER Planungen AUSSCHLIESSLICH in `<thought>...</thought>` oder `<think>...</think>` Tags.\n\n"
+                "WICHTIG: Schreibe ALLE Planungen AUSSCHLIESSLICH in `<thought>...</thought>` oder `<think>...</think>` Tags.\n"
+                "Der Nutzer hört NICHT, was in diesen Tags steht. Nutze sie für deinen internen Monolog.\n\n"
                 "WERKZEUGE:\n"
                 "Um ein Werkzeug zu nutzen, gib am Ende exakt EINEN JSON-Block aus. Kein Markdown (```).\n"
                 "{ \"tool\": \"search_web\", \"kwargs\": { \"query\": \"...\" } }\n"
-                "{ \"tool\": \"execute_command\", \"kwargs\": { \"command\": \"...\" } }\n\n"
+                "{ \"tool\": \"execute_command\", \"kwargs\": { \"command\": \"...\" } }\n"
+                "{ \"tool\": \"get_system_info\", \"kwargs\": {} }\n\n"
                 "REGELN:\n"
                 "1. SCHRITT FÜR SCHRITT: Führe immer nur EIN Werkzeug aus und warte auf das Ergebnis. Wiederhole nicht ständig dein Endziel.\n"
                 "2. KEINE WIEDERHOLUNG: Sprich nur, wenn du NEUE Infos hast. Wenn du nur das OS prüfst, sag nur 'Ich prüfe das System...'.\n"
-                "3. AUTONOM: Frage nicht nach Infos, die du selbst per Tool finden kannst.\n"
+                "3. AUTONOM: Frage nicht nach Infos, die du selbst per Tool finden kannst. Nutze 'get_system_info' um das System zu identifizieren.\n"
                 "4. Antworte auf DEUTSCH."
             )
         
@@ -384,10 +388,22 @@ class JarvisAssistant:
             else:
                 speech_source = clean_response
 
-            # Gedanken-Tags entfernen
-            speech_text = re.sub(r"<(thought|think)>.*?</\1>", "", speech_source, flags=re.DOTALL | re.IGNORECASE).strip()
+            # Gedanken-Tags entfernen (robuster)
+            speech_text = response_text
+            if json_string:
+                # Wenn JSON vorhanden ist, nehmen wir nur den Teil DAVOR für die Sprache
+                speech_text = response_text[:response_text.find(json_string)].strip()
+            
+            # Alle Arten von Gedanken-Tags und deren Inhalt entfernen
+            speech_text = re.sub(r"<(thought|think)>.*?</\1>", "", speech_text, flags=re.DOTALL | re.IGNORECASE).strip()
             speech_text = re.sub(r"<(thought|think)>.*", "", speech_text, flags=re.DOTALL | re.IGNORECASE).strip()
-            speech_text = re.sub(r"</(thought|think)>", "", speech_text, flags=re.IGNORECASE).strip()
+            speech_text = re.sub(r".*?</(thought|think)>", "", speech_text, flags=re.DOTALL | re.IGNORECASE).strip()
+            
+            # Markdown-Überbleibsel entfernen
+            speech_text = re.sub(r"```[a-z]*", "", speech_text, flags=re.IGNORECASE)
+            speech_text = re.sub(r"```", "", speech_text)
+            
+            # Letzte Aufräumung von HTML-ähnlichen Tags
             speech_text = re.sub(r"<[^>]+>", "", speech_text).strip()
 
             # Nur vorlesen, wenn es Text gibt, Buchstaben enthält und noch NICHT gesagt wurde
