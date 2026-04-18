@@ -142,6 +142,15 @@ class JarvisGUI(QWidget):
         elif sender == "System":
              self.status_label.setText(text.upper()[:30])
 
+    def process_text_input(self):
+        text = self.input_field.text()
+        if text:
+            self.output_label.setText(f"User: {text}")
+            self.input_field.clear()
+            if hasattr(self, 'at'):
+                # Führe die Agent-Logik in einem Thread aus, damit GUI nicht einfriert
+                threading.Thread(target=lambda: self.at.assistant.run_ollama_agent(text), daemon=True).start()
+
     def closeEvent(self, event):
         """Wird aufgerufen, wenn das Fenster geschlossen wird."""
         print("[SYSTEM]: Beende Jarvis GUI...")
