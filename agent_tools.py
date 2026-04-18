@@ -264,6 +264,19 @@ def execute_command(command: str) -> str:
     
     print(f"[Tool Execution] Führe Befehl aus: '{command}'")
     
+    # Erkennung von grafischen Programmen (GUI), damit Jarvis nicht blockiert
+    gui_apps = ["firefox", "code", "vlc", "nautilus", "virt-manager", "ptyxis", 
+                "gnome-terminal", "steam", "heroic", "brave", "discord", "spotify", "gimp"]
+    is_gui = any(app in command.lower() for app in gui_apps)
+    
+    if is_gui:
+        try:
+            # Starte GUI-Apps im Hintergrund und kehre sofort zurück
+            subprocess.Popen(command, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, preexec_fn=os.setsid)
+            return f"Programm '{command}' wurde erfolgreich im Hintergrund gestartet."
+        except Exception as e:
+            return f"Fehler beim Starten des grafischen Programms: {e}"
+
     # Schutz vor pacman locks
     if "pacman" in command or "yay" in command:
         if os.path.exists("/var/lib/pacman/db.lck"):
