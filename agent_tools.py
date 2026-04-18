@@ -249,74 +249,65 @@ def execute_command(command: str) -> str:
     
     if get_security_mode():
         print(f"[Tool Execution] BLOCKIERT (Sicherheitsmodus): '{command}'")
-        return "FEHLER: Der Sicherheitsmodus ist AKTIVIERT. Jarvis darf aktuell KEINE Systembefehle ausführen. Der Nutzer muss diesen erst in den Einstellungen (/settings) deaktivieren."
+        return "FEHLER: Der Sicherheitsmodus ist AKTIVIERT. Jarvis darf aktuell KEINE Systembefehle ausführen."
 
+    # Beende vorherigen aktiven Prozess und seine gesamte Gruppe
+    if active_process and active_process.isalive():
+        print(f"[SYSTEM]: Beende laufenden Prozess {active_process.pid}...")
+        try:
+            import os
+            import signal
+            os.killpg(os.getpgid(active_process.pid), signal.SIGTERM)
+            active_process.close(force=True)
+        except:
+            if active_process: active_process.terminate(force=True)
+    
     print(f"[Tool Execution] Führe Befehl aus: '{command}'")
     
-    blocked_keywords = ["rm -rf /", "mkfs", "dd "]
-    for keyword in blocked_keywords:
-        if keyword in command:
-            return f"Befehl blockiert: Enthält potenziell gefährliches Schlüsselwort '{keyword}'."
-            
+    # Schutz vor pacman locks
+    if "pacman" in command or "yay" in command:
+        if os.path.exists("/var/lib/pacman/db.lck"):
+            return "FEHLER: Der Paketmanager ist blockiert (/var/lib/pacman/db.lck existiert). Ein anderer Prozess (oder ein abgestürzter Jarvis-Prozess) nutzt gerade pacman. Bitte warte kurz oder lösche die Sperrdatei."
+
     cmd_parts = command.split()
-    base_cmd = cmd_parts[0]
     
-    # Beende vorherigen aktiven Prozess, falls einer noch läuft
-    if active_process and active_process.isalive():
-        active_process.terminate(force=True)
-    
-    # Prüfe ob es ein interaktiver Befehl ist (Installation, Updates, sudo)
+    # Prüfe ob es ein interaktiver Befehl ist
     interactive_commands = ["sudo", "pacman", "yay", "paru", "apt"]
     is_interactive = any(cmd in cmd_parts for cmd in interactive_commands)
     
     if is_interactive:
         try:
-            # Starte persistenten Shell-Prozess
-            active_process = pexpect.spawn(command, encoding='utf-8', timeout=5)
+            # Starte in einer neuen Prozessgruppe für sauberes Beenden
+            active_process = pexpect.spawn(command, encoding='utf-8', timeout=5, setpgid=True)
             return read_process_output()
         except Exception as e:
             return f"Fehler beim Starten des interaktiven Befehls: {e}"
     else:
-        # Prüfen, ob es ein grafisches Programm ist oder ein Konsolenbefehl
-        gui_apps = ["firefox", "code", "vlc", "nautilus", "virt-manager", "ptyxis", "gnome-terminal"]
-        is_gui = any(app in command.lower() for app in gui_apps)
-        
-        if is_gui:
-            try:
-                subprocess.Popen(cmd_parts, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                return f"Programm erfolgreich gestartet: {command} (läuft im Hintergrund)"
-            except Exception as e:
-                return f"Fehler beim Starten des Programms: {e}"
-        else:
-            # Normaler Konsolenbefehl: Output abfangen und zurückgeben
-            try:
-                result = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=30)
-                output = result.stdout.strip()
-                error = result.stderr.strip()
-                if output:
-                    return output
-                if error:
-                    return f"Fehler-Output: {error}"
-                return "Befehl wurde ohne Rückgabe ausgeführt."
-            except Exception as e:
-                return f"Fehler bei der Ausführung: {e}"
+        # Normaler Konsolenbefehl
+        try:
+            result = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=30)
+            output = filter_noise(result.stdout.strip())
+            error = filter_noise(result.stderr.strip())
+            if output: return output
+            if error: return f"Fehler-Output: {error}"
+            return "Befehl wurde ohne Rückgabe ausgeführt."
+        except Exception as e:
+            return f"Fehler bei der Ausführung: {e}"
 
-def send_input(text: str) -> str:
-    """Sendet Text an den wartenden Installer/Prozess im Terminal (z.B. 'y', '1', 'a')."""
-    global active_process
-    
-    if get_security_mode():
-        return "FEHLER: Der Sicherheitsmodus ist AKTIVIERT. Eingaben ins Terminal sind blockiert."
-
-    print(f"[Tool Execution] Sende Eingabe an Terminal: '{text}'")
-    if not active_process or not active_process.isalive():
-        return "Fehler: Es läuft aktuell kein interaktiver Befehl, der auf Eingaben wartet."
-    
-    try:
-        active_process.sendline(text)
-        return read_process_output()
-    except Exception as e:
-        return f"Fehler beim Senden der Eingabe: {e}"
+def filter_noise(text: str) -> str:
+    """Filtert ALSA, SoX und andere irrelevante Warnungen aus dem Output."""
+    if not text: return ""
+    lines = text.split('\n')
+    filtered_lines = []
+    noise_patterns = [
+        "ALSA lib", "snd_pcm", "connect(2) call to", "attempt to connect", "Cannot open device",
+        "a52 is only for playback", "Invalid card", "SoX could not be found", "flash-attn is not installed",
+        "Loading Silero VAD", "Using cache found in", "VAD loaded", "Unknown PCM"
+    ]
+    for line in lines:
+        if not any(pattern in line for pattern in noise_patterns):
+            filtered_lines.append(line)
+    return '\n'.join(filtered_lines).strip()
 
 def read_process_output() -> str:
     """Liest den Output des Terminals in einer Schleife, bis es pausiert oder beendet ist."""
@@ -324,63 +315,52 @@ def read_process_output() -> str:
     full_output = ""
     
     input_prompts = [
-        '(?i)password', 
-        '(?i)passwort', 
-        r'\[Y/n\]', 
-        r'\[y/N\]', 
-        r'\[y/n\]', 
-        r'\? \[Y/n\]',
-        r'\(J/n\)',
-        r'\(j/N\)',
-        r'==> .*:',
-        r':: .*:',
-        r'\? \[y/N\]',
-        pexpect.EOF,
-        pexpect.TIMEOUT
+        '(?i)password', '(?i)passwort', 
+        r'\[Y/n\]', r'\[y/N\]', r'\[y/n\]', r'\? \[Y/n\]',
+        r'\(J/n\)', r'\(j/N\)', r'==> .*:', r':: .*:', r'\? \[y/N\]',
+        pexpect.EOF, pexpect.TIMEOUT
     ]
     
     while True:
         try:
-            # Kürzere Timeouts für flüssigeres Lesen
             index = active_process.expect(input_prompts, timeout=2)
             
             output_chunk = active_process.before + (str(active_process.after) if active_process.after not in [pexpect.EOF, pexpect.TIMEOUT] else "")
             full_output += output_chunk
             
-            if index == 0 or index == 1: # Passwort prompt
+            if index <= 1: # Passwort prompt
                 if get_security_mode():
                     active_process.sendline("\x03")
-                    return full_output + "\n[SYSTEM: Sicherheitsmodus AKTIVIERT - Passwort-Eingabe blockiert]"
+                    return filter_noise(full_output) + "\n[SYSTEM: Passwort-Eingabe blockiert]"
 
-                print("[SYSTEM]: Passwort-Anfrage erkannt. Öffne GUI-Fenster...")
+                print("[SYSTEM]: Passwort-Anfrage erkannt...")
                 pwd = get_gui_password()
                 if pwd:
                     active_process.sendline(pwd)
-                    time.sleep(0.2)
+                    time.sleep(0.5)
                     continue 
                 else:
                     active_process.sendline("\x03")
-                    return full_output + "\n[SYSTEM: Abbruch durch Benutzer]"
+                    return filter_noise(full_output) + "\n[SYSTEM: Abbruch durch Benutzer]"
                     
             elif index == len(input_prompts) - 2: # EOF
-                return full_output + "\n\n[BEFEHL ABGESCHLOSSEN]"
+                return filter_noise(full_output) + "\n\n[BEFEHL ABGESCHLOSSEN]"
             
             elif index == len(input_prompts) - 1: # TIMEOUT
-                # Wenn wir im Timeout landen, schauen wir ob der Prozess noch lebt
                 if not active_process.isalive():
-                    return full_output + "\n\n[BEFEHL BEENDET]"
-                # Falls er noch lebt, geben wir zurück was wir haben (verhindert Hängen)
-                return full_output + "\n\n[SYSTEM: Befehl läuft noch im Hintergrund...]"
+                    return filter_noise(full_output) + "\n\n[BEFEHL BEENDET]"
+                # Bei pacman/yay warten wir länger
+                if any(x in full_output.lower() for x in ["install", "update", "upgrade", "fetching"]):
+                    continue
+                return filter_noise(full_output) + "\n\n[SYSTEM: Befehl läuft noch im Hintergrund...]"
                 
             else: # Auto-Confirm (y)
-                current_prompt = str(active_process.after)
-                print(f"[SYSTEM]: Automatische Bestätigung (y) für: {current_prompt.strip()}")
                 active_process.sendline("y")
-                full_output += f"\n[SYSTEM: Auto-Bestätigung 'y' ausgeführt]\n"
+                full_output += "\n[SYSTEM: Auto-Bestätigung 'y' ausgeführt]\n"
                 continue
                 
         except Exception as e:
-            return full_output + f"\n[SYSTEM: Fehler beim Lesen: {e}]"
+            return filter_noise(full_output) + f"\n[SYSTEM: Fehler beim Lesen: {e}]"
 
 def get_system_info() -> str:
     """Gibt Informationen über das Betriebssystem und die Hardware zurück (sicher)."""
