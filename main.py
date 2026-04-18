@@ -36,6 +36,9 @@ class JarvisAssistant:
         self.piper_voice = "de_DE-thorsten-high"
         self.qwen_voice = "default.wav"
         
+        # GUI Callback
+        self.on_status_change = None # Callback function(status_str)
+        
         # Konfiguration laden
         self.load_config()
         
@@ -275,13 +278,20 @@ class JarvisAssistant:
         interrupt_event.set()
         listener_thread.join(timeout=1.0)
 
+    def set_status(self, status):
+        if self.on_status_change:
+            self.on_status_change(status)
+
     def run_ollama_agent(self, user_text):
+        self.set_status("thinking")
         # Slash-Commands SOFORT abfangen
         if user_text.strip().startswith("/"):
             if self.handle_slash_commands(user_text):
+                self.set_status("idle")
                 return
             else:
                 self.log(f"Unbekannter Befehl: {user_text}", "standard")
+                self.set_status("idle")
                 return
 
         # Sprach-Logik für den System-Prompt
@@ -423,9 +433,11 @@ class JarvisAssistant:
                 is_hallucination = any(p.lower() in speech_text.lower() for p in hallucination_patterns)
                 
                 if speech_text not in spoken_history and not is_hallucination:
+                    self.set_status("speaking")
                     self.log(f"[{self.ollama_model}]: {speech_text}", "standard")
                     self.speak_with_interrupt(speech_text)
                     spoken_history.append(speech_text)
+                    self.set_status("thinking")
                     if self.interrupted_by_wakeword: break
             
             self.history.append({"role": "assistant", "content": response_text})
@@ -463,10 +475,12 @@ class JarvisAssistant:
                     break
             else:
                 break
+        self.set_status("idle")
 
     def voice_input_worker(self):
         while True:
             try:
+                self.set_status("idle")
                 if self.interrupted_by_wakeword:
                     audio_capture.play_notification()
                     detected = True
@@ -475,7 +489,9 @@ class JarvisAssistant:
                     detected = listen_for_wakeword()
                 
                 if detected:
+                    self.set_status("listening")
                     audio_data = record_until_silence(silence_duration=4.0)
+                    self.set_status("thinking")
                     save_wav("latest_input.wav", audio_data)
                     text = self.transcribe_audio("latest_input.wav")
                     
