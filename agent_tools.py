@@ -272,8 +272,9 @@ def execute_command(command: str) -> str:
     interactive_keywords = ["sudo", "install", "update", "upgrade", "-S", "-R", "-U", "-y", "paru", "apt"]
     is_interactive = any(k in command.lower() for k in interactive_keywords)
     
-    # Aber reine Abfragen (Query) sind NICHT interaktiv
-    if "-Q" in command or "-Si" in command or "-Ss" in command:
+    # Reine Abfragen (Query) sind NIEMALS interaktiv
+    query_keywords = ["-Q", "-Si", "-Ss", "which ", "whereis ", "type ", "ls ", "cat ", "grep ", "find "]
+    if any(q in command.lower() for q in query_keywords):
         is_interactive = False
     
     if is_interactive:
@@ -291,6 +292,9 @@ def execute_command(command: str) -> str:
             error = filter_noise(result.stderr.strip())
             if output: return output
             if error: return f"Fehler-Output: {error}"
+            # Klarere Ansage für Jarvis bei leeren Suchen
+            if any(q in command.lower() for q in ["which", "whereis", "type", "grep"]):
+                return f"Information: Der Befehl '{command}' lieferte kein Ergebnis (nicht gefunden)."
             return "Befehl wurde ohne Rückgabe ausgeführt."
         except Exception as e:
             return f"Fehler bei der Ausführung: {e}"
