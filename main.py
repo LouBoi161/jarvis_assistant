@@ -10,6 +10,7 @@ import audio_capture
 import logging
 import re
 import sys
+import time
 
 # Eigene Module
 from audio_capture import listen_for_wakeword, record_until_silence, save_wav
