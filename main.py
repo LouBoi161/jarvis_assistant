@@ -477,6 +477,25 @@ class JarvisAssistant:
                 break
         self.set_status("idle")
 
+    def update_config(self, new_data):
+        """Aktualisiert die laufende Konfiguration und speichert sie."""
+        self.ollama_model = new_data.get("ollama_model", self.ollama_model)
+        self.view_mode = new_data.get("view_mode", self.view_mode)
+        self.security_mode = new_data.get("security_mode", self.security_mode)
+        self.language = new_data.get("language", self.language)
+        self.tts_type = new_data.get("tts_type", self.tts_type)
+        self.piper_voice = new_data.get("piper_voice", self.piper_voice)
+        self.qwen_voice = new_data.get("qwen_voice", self.qwen_voice)
+        
+        # TTS Engine neu initialisieren falls nötig
+        self.init_tts()
+        self.save_config()
+
+    def run_voice_only(self):
+        """Version von run(), die nicht das Terminal blockiert."""
+        self.log("\n--- JARVIS VOICE-ONLY MODUS AKTIV ---", "standard")
+        self.voice_input_worker() # Dies ist bereits ein Loop
+
     def voice_input_worker(self):
         while True:
             try:
