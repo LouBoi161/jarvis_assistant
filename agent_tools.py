@@ -83,31 +83,22 @@ def write_file(file_path: str, content: str) -> str:
     except Exception as e: return f"Fehler: {e}"
 
 def take_screenshot() -> str:
-    """Macht einen Screenshot mit PyQt5 (funktioniert zuverlässiger unter Wayland/CachyOS)."""
-    from PyQt5.QtWidgets import QApplication
-    from PyQt5.QtCore import QTimer
+    """Macht einen Screenshot mit 'grim' (Wayland native)."""
     import os
     import time
+    import subprocess
     
-    print("[Tool Execution] Erstelle Screenshot via Qt...")
+    print("[Tool Execution] Erstelle Screenshot via grim...")
     try:
-        # Pfad vorbereiten
         filename = f"screenshot_{int(time.time())}.png"
         path = os.path.expanduser(f"~/{filename}")
         
-        # Wir brauchen eine laufende App-Instanz
-        app = QApplication.instance()
-        if not app:
-            return "Fehler: Kein GUI-Kontext für Screenshot gefunden."
+        # grim ist das Standard-Tool für Wayland-Screenshots
+        subprocess.run(f"grim '{path}'", shell=True, check=True)
         
-        # Screenshot vom primären Bildschirm
-        screen = app.primaryScreen()
-        screenshot = screen.grabWindow(0)
-        screenshot.save(path, "png")
-        
-        return f"ERFOLG: Der Screenshot wurde erstellt und unter '{path}' gespeichert. Du kannst ihn dem Nutzer jetzt melden."
+        return f"ERFOLG: Der Screenshot wurde erstellt und unter '{path}' gespeichert. Melde dem Nutzer den Dateinamen."
     except Exception as e:
-        return f"FEHLER beim Screenshot: {e}"
+        return f"FEHLER beim Screenshot mit grim: {e}. Versuche es evtl. mit execute_command und einem anderen Tool."
 
 def execute_command(command: str) -> str:
     global active_process
