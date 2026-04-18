@@ -330,53 +330,57 @@ def read_process_output() -> str:
         r'\[y/N\]', 
         r'\[y/n\]', 
         r'\? \[Y/n\]',
+        r'\(J/n\)',
+        r'\(j/N\)',
         r'==> .*:',
         r':: .*:',
         r'\? \[y/N\]',
-        pexpect.EOF
+        pexpect.EOF,
+        pexpect.TIMEOUT
     ]
     
     while True:
         try:
-            index = active_process.expect(input_prompts, timeout=60)
+            # Kürzere Timeouts für flüssigeres Lesen
+            index = active_process.expect(input_prompts, timeout=2)
             
-            # Text vor dem Match sichern
-            output_chunk = active_process.before + (str(active_process.after) if active_process.after != pexpect.EOF else "")
+            output_chunk = active_process.before + (str(active_process.after) if active_process.after not in [pexpect.EOF, pexpect.TIMEOUT] else "")
             full_output += output_chunk
             
             if index == 0 or index == 1: # Passwort prompt
                 if get_security_mode():
                     active_process.sendline("\x03")
-                    return full_output + "\n[System: Sicherheitsmodus AKTIVIERT - Passwort-Eingabe blockiert]"
+                    return full_output + "\n[SYSTEM: Sicherheitsmodus AKTIVIERT - Passwort-Eingabe blockiert]"
 
-                print("[System]: Passwort-Anfrage erkannt. Öffne GUI-Fenster...")
+                print("[SYSTEM]: Passwort-Anfrage erkannt. Öffne GUI-Fenster...")
                 pwd = get_gui_password()
                 if pwd:
                     active_process.sendline(pwd)
-                    # Kurze Pause für die Verarbeitung
-                    import time
-                    time.sleep(0.5)
-                    full_output += "\n[System: Passwort gesendet]\n"
-                    continue # Weiterlesen in der Schleife
+                    time.sleep(0.2)
+                    continue 
                 else:
-                    active_process.sendline("\x03") # Ctrl+C
-                    return full_output + "\n[System: Abbruch durch Benutzer]"
+                    active_process.sendline("\x03")
+                    return full_output + "\n[SYSTEM: Abbruch durch Benutzer]"
                     
-            elif index == len(input_prompts) - 1: # EOF
+            elif index == len(input_prompts) - 2: # EOF
                 return full_output + "\n\n[BEFEHL ABGESCHLOSSEN]"
+            
+            elif index == len(input_prompts) - 1: # TIMEOUT
+                # Wenn wir im Timeout landen, schauen wir ob der Prozess noch lebt
+                if not active_process.isalive():
+                    return full_output + "\n\n[BEFEHL BEENDET]"
+                # Falls er noch lebt, geben wir zurück was wir haben (verhindert Hängen)
+                return full_output + "\n\n[SYSTEM: Befehl läuft noch im Hintergrund...]"
                 
-            else: # Auto-Confirm für andere Prompts
+            else: # Auto-Confirm (y)
                 current_prompt = str(active_process.after)
-                print(f"[System]: Auto-Bestätigung (y) für: {current_prompt.strip()}")
+                print(f"[SYSTEM]: Automatische Bestätigung (y) für: {current_prompt.strip()}")
                 active_process.sendline("y")
-                full_output += f"\n[System: Auto-Bestätigung 'y' für {current_prompt}]\n"
+                full_output += f"\n[SYSTEM: Auto-Bestätigung 'y' ausgeführt]\n"
                 continue
                 
-        except pexpect.TIMEOUT:
-            # Wenn 60 Sekunden lang nichts kommt, geben wir den aktuellen Stand zurück
-            return full_output + "\n\n[System: Timeout - Befehl läuft evtl. noch im Hintergrund]"
         except Exception as e:
-            return full_output + f"\n[Fehler beim Lesen des Outputs: {e}]"
+            return full_output + f"\n[SYSTEM: Fehler beim Lesen: {e}]"
 
 def get_system_info() -> str:
     """Gibt Informationen über das Betriebssystem und die Hardware zurück (sicher)."""

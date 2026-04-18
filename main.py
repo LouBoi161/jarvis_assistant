@@ -408,7 +408,17 @@ class JarvisAssistant:
 
             # Nur vorlesen, wenn es Text gibt, Buchstaben enthält und noch NICHT gesagt wurde
             if speech_text and re.search(r'[a-zA-ZäöüßÄÖÜ]', speech_text):
-                if speech_text not in spoken_history:
+                # Wenn der Text nur aus einer Frage besteht, ob Hilfe benötigt wird (Halluzination nach Logs), ignorieren
+                hallucination_patterns = [
+                    "Was möchtest du wissen?",
+                    "keine spezifische Frage",
+                    "Um dir helfen zu können",
+                    "brauche ich mehr Kontext",
+                    "Bitte stelle deine Frage"
+                ]
+                is_hallucination = any(p.lower() in speech_text.lower() for p in hallucination_patterns)
+                
+                if speech_text not in spoken_history and not is_hallucination:
                     self.log(f"[{self.ollama_model}]: {speech_text}", "standard")
                     self.speak_with_interrupt(speech_text)
                     spoken_history.append(speech_text)
@@ -435,7 +445,14 @@ class JarvisAssistant:
                         tool_name = data.get('tool')
                         print(f">>>> [JARVIS]: Nutze '{tool_name}'...")
                         tool_result = parse_and_execute_tool(json.dumps(data))
-                        self.history.append({"role": "system", "content": f"Tool Ergebnis:\n{tool_result}"})
+                        
+                        # Output kürzen, falls zu lang (max 3000 Zeichen für LLM Kontext)
+                        if tool_result and len(tool_result) > 3000:
+                            tool_result = tool_result[:1500] + "\n... [Output von Jarvis gekürzt] ...\n" + tool_result[-1500:]
+                        
+                        # Kontext verstärken: Wir sind noch in einer Aufgabe!
+                        context_msg = f"TOOL_RESULT ({tool_name}):\n{tool_result}\n\nIMPORTANT: You are an autonomous agent. Analyze this result and CONTINUE with the user's original request until finished. If finished, say 'Task complete'."
+                        self.history.append({"role": "system", "content": context_msg})
                     else:
                         break
                 except:
