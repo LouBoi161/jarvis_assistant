@@ -124,14 +124,21 @@ class TTSEngine:
             print(f"Piper model {self.piper_voice} not found. Downloading...")
             base_url = "https://huggingface.co/rhasspy/piper-voices/resolve/main"
             
-            # Construct download URL (this is a heuristic for piper's repo structure)
-            lang_code = self.piper_voice.split('-')[0]
-            country_code = self.piper_voice.split('-')[1]
-            voice_name = self.piper_voice.split('-')[2]
-            quality = self.piper_voice.split('-')[3]
-            
-            # Example: de/de_DE/thorsten/high/de_DE-thorsten-high.onnx
-            repo_path = f"{lang_code}/{lang_code}_{country_code.upper()}/{voice_name}/{quality}/{self.piper_voice}.onnx"
+            # Construct download URL
+            # Standard Piper voice format is: lang_COUNTRY-voice-quality
+            # e.g., de_DE-thorsten-high
+            parts = self.piper_voice.split('-')
+            if len(parts) >= 3:
+                lang_country = parts[0]
+                voice_name = parts[1]
+                quality = parts[2]
+                lang_code = lang_country.split('_')[0]
+                
+                # Structure: lang/lang_COUNTRY/voice_name/quality/model.onnx
+                repo_path = f"{lang_code}/{lang_country}/{voice_name}/{quality}/{self.piper_voice}.onnx"
+            else:
+                print(f"Error: Piper voice name '{self.piper_voice}' is not in the expected format (lang_COUNTRY-voice-quality).")
+                return False
             
             try:
                 print(f"Downloading from {base_url}/{repo_path}...")
@@ -140,7 +147,6 @@ class TTSEngine:
                 print("Download complete.")
             except Exception as e:
                 print(f"Download failed: {e}")
-                # Fallback to a simpler structure if needed or report error
                 return False
         return True
 

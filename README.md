@@ -49,16 +49,18 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
 ### 2. Install Ollama
-Ollama is used for the LLM reasoning (Gemma 4). If you don't have it yet, install it with:
-```bash
-curl -fsSL https://ollama.com/install.sh | sh
-```
-Make sure the service is running (`ollama serve`) and pull the default model:
+Ollama is used for the LLM reasoning. Make sure the service is running (`ollama serve`) and pull the default model:
 ```bash
 ollama pull gemma4:e4b
 ```
+> **Note:** If you get a "model not found" error during startup, ensure you have successfully pulled the model with the command above. You can check your installed models with `ollama list`.
 
-### 3. Python Setup
+### 3. TTS Models (Piper)
+JARVIS uses **Piper TTS** by default for fast and natural German/English speech. 
+- **Automatic Download:** JARVIS will automatically download the required Piper models (e.g., `de_DE-thorsten-high`) on the first run.
+- **Manual Download (Optional):** If you want to pre-download them, they are stored in the `piper_models/` directory.
+
+### 4. Python Setup
 We recommend using **uv** for lightning-fast dependency installation.
 
 ```bash
