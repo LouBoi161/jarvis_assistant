@@ -234,10 +234,29 @@ class JarvisGUI(QWidget):
             if hasattr(self, 'at'):
                 threading.Thread(target=self.at.assistant.run_ollama_agent, args=(t,), daemon=True).start()
     def closeEvent(self, event):
-        if hasattr(self, 'at'): self.at.terminate(); self.at.wait()
-        os.killpg(0, 9); event.accept()
+        """Wird aufgerufen, wenn das Fenster geschlossen wird."""
+        print("[SYSTEM]: Beende Jarvis und bereinige Speicher...")
 
-if __name__ == "__main__":
+        # 1. Thread stoppen
+        if hasattr(self, 'at'):
+            self.at.terminate()
+            self.at.wait()
+
+        # 2. Modelle aktiv entladen (VRAM fix)
+        if hasattr(self, 'assistant'):
+            self.assistant.unload_models()
+
+        # 3. Alle hängenden Subprozesse in dieser Gruppe killen
+        import os
+        import signal
+        try:
+            os.killpg(0, signal.SIGKILL)
+        except:
+            pass
+
+        event.accept()
+
+    if __name__ == "__main__":
     app = QApplication(sys.argv); app.setStyle("Fusion")
     assistant = JarvisAssistant()
     gui = JarvisGUI(assistant)

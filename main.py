@@ -207,6 +207,28 @@ class JarvisAssistant:
             
             if "task complete" in response_text.lower() or not did_action: break
 
+    def unload_models(self):
+        """Entlädt alle Modelle und leert den VRAM/RAM."""
+        self.log("Entlade Modelle und bereinige Speicher...", "standard")
+        
+        # 1. TTS Engine entladen
+        if hasattr(self, 'tts') and self.tts:
+            self.tts.unload_models()
+            
+        # 2. Whisper STT entladen
+        if hasattr(self, 'stt_model'):
+            del self.stt_model
+            self.stt_model = None
+            
+        # 3. CUDA Cache leeren (falls vorhanden)
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            
+        # 4. Python Garbage Collector
+        import gc
+        gc.collect()
+        self.log("Speicher erfolgreich bereinigt.", "standard")
+
     def run_voice_only(self):
         self.log("JARVIS ONLINE", "standard")
         while True:
