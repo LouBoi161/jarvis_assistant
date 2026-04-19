@@ -256,7 +256,7 @@ class JarvisGUI(QWidget):
 
         event.accept()
 
-    if __name__ == "__main__":
+if __name__ == "__main__":
     app = QApplication(sys.argv); app.setStyle("Fusion")
     assistant = JarvisAssistant()
     gui = JarvisGUI(assistant)
