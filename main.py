@@ -207,6 +207,18 @@ class JarvisAssistant:
             
             if "task complete" in response_text.lower() or not did_action: break
 
+    def update_config(self, new_data):
+        """Aktualisiert die laufende Konfiguration und speichert sie."""
+        self.log("Aktualisiere System-Konfiguration...", "standard")
+        for k, v in new_data.items():
+            if hasattr(self, k):
+                setattr(self, k, v)
+        
+        # TTS Engine neu initialisieren falls nötig
+        self.init_tts()
+        self.save_config()
+        self.log("Konfiguration erfolgreich übernommen.", "standard")
+
     def unload_models(self):
         """Entlädt alle Modelle und leert den VRAM/RAM."""
         self.log("Entlade Modelle und bereinige Speicher...", "standard")
