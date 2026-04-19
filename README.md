@@ -1,117 +1,65 @@
-# JARVIS - AI Voice Assistant for Linux (WIP)
+# JARVIS - AI Voice Assistant for Linux (Stable v2.3)
 
-A local, intelligent, and professional AI voice assistant for Linux, powered by Ollama, OpenAI Whisper, and Qwen3-TTS.
-
-**Status:** Work In Progress (WIP) - Not yet final, but fully functional.
+A local, intelligent, and professional AI voice assistant for Linux, powered by Ollama, OpenAI Whisper, and modern TTS engines.
 
 ## Features
-- **Voice Interaction:** Wake word detection ("Hey Jarvis") and silence-based recording.
-- **Local STT:** Uses OpenAI Whisper (running locally) for high-quality speech-to-text.
-- **LLM Reasoning:** Integrates with **Ollama** (default model: `gemma4:e4b`) for intelligent responses and tool execution.
-- **Natural TTS:** Uses **Qwen3-TTS (0.6B)** for high-quality, expressive voice output.
-- **Tool Execution:** JARVIS can execute shell commands, search the web, and manage settings through its integrated agent system.
-- **Emotion Support:** Supports emotional tags like `[glücklich]`, `[aufgeregt]`, `[nachdenklich]`, and `[freundlich]` for more expressive speech.
+- **All-in-One GUI:** Integrated Chat and Settings interface.
+- **Voice Interaction:** Wake word detection ("Hey Jarvis") and local STT/TTS.
+- **Proactive Agent:** Executes shell commands, searches the web, and manages files.
+- **VRAM Management:** Actively unloads models on exit to free up your GPU.
 
 ## System Requirements
 
 | Component | Minimum (CPU-only) | Recommended (GPU) |
 |-----------|--------------------|-------------------|
 | **RAM** | 8 GB | 16 GB+ |
-| **GPU** | Not required (Intel/AMD iGPU ok) | NVIDIA GPU (8GB+ VRAM) |
-| **Storage** | ~10 GB free space | ~15 GB (for models) |
-| **OS** | Linux (Ubuntu, Arch, etc.) | Linux with CUDA support |
+| **GPU** | Not required | NVIDIA GPU (8GB+ VRAM) |
+| **Storage** | ~10 GB | ~15 GB (for models) |
 
-> **Note:** Running on CPU/iGPU is fully supported but will result in higher latency (slower response times). An NVIDIA GPU is recommended for a "real-time" experience.
+## Installation
 
-## Requirements & Installation
-
-### 1. System Dependencies & uv
-JARVIS requires some system-level libraries and **uv** for managing the Python environment.
-
-**Arch Linux:**
+### 1. System Dependencies
 ```bash
-sudo pacman -S portaudio ffmpeg uv
-```
-
-**Ubuntu/Debian:**
-```bash
-sudo apt update
-sudo apt install portaudio19-dev ffmpeg
-# Install uv via script (if not already installed)
-curl -LsSf https://astral.sh/uv/install.sh | sh
-```
-
-**Fedora:**
-```bash
-sudo dnf install portaudio-devel ffmpeg
-# Install uv via script (if not already installed)
-curl -LsSf https://astral.sh/uv/install.sh | sh
+# Arch Linux
+sudo pacman -S portaudio ffmpeg uv scrot grim
 ```
 
 ### 2. Install Ollama
-Ollama is used for the LLM reasoning. Make sure the service is running (`ollama serve`) and pull the default model:
+Make sure the service is running and pull the default model:
 ```bash
 ollama pull gemma4:e4b
 ```
-> **Note:** If you get a "model not found" error during startup, ensure you have successfully pulled the model with the command above. You can check your installed models with `ollama list`.
 
-### 3. TTS Models (Piper)
-JARVIS uses **Piper TTS** by default for fast and natural German/English speech. 
-- **Automatic Download:** JARVIS will automatically download the required Piper models (e.g., `de_DE-thorsten-high`) on the first run.
-- **Manual Download (Optional):** If you want to pre-download them, they are stored in the `piper_models/` directory.
-
-### 4. Python Setup
-We recommend using **uv** for lightning-fast dependency installation.
-
+### 3. Python Setup (via uv)
 ```bash
-# 1. Clone the repository
+# Clone
 git clone https://github.com/LouBoi161/jarvis_assistant.git
 cd jarvis_assistant
 
-# 2. Create a virtual environment
+# Setup & Install
 uv venv
-
-# 3. ACTIVATE the virtual environment (IMPORTANT!)
-# You must do this every time you open a new terminal!
-source .venv/bin/activate
-
-# 4. Install all requirements
 uv pip install -r requirements.txt
 ```
 
 ## Usage
 
-### Run JARVIS
-**Make sure your virtual environment is active** (you should see `(.venv)` in your terminal prompt).
-
-If `python main.py` fails with a `ModuleNotFoundError`, use the explicit path:
-
+### 🚀 Start GUI (Recommended)
+The easiest way to use JARVIS is via the floating chat interface:
 ```bash
-./.venv/bin/python main.py
+uv run python gui.py
 ```
-2. **Interaction:**
-   - **Voice:** Say **"Hey Jarvis"** to wake him up. After the notification sound, speak your command.
-   - **Text:** You can also type directly into the terminal while JARVIS is running.
-3. **Commands:**
-   - `/settings` - Open the GUI to switch Ollama models.
-   - `/model <name>` - Quick-switch to another model (e.g., `/model llama3`).
-   - `/clear` - Clear the current chat history.
-   - `/exit` - Close the assistant.
 
-## Custom Voice Cloning
-JARVIS supports zero-shot voice cloning via Qwen3-TTS.
-1. Place a short audio file (5-10 seconds) of the target voice in the root directory.
-2. Rename it to `voice.wav`.
-3. (Optional) Create a `voice.txt` containing the exact transcript of what is said in `voice.wav` for better quality.
-4. Restart JARVIS. He will now speak with that voice.
+### 🖥️ Start CLI (Terminal only)
+If you prefer the terminal:
+```bash
+uv run python main.py
+```
 
-## Roadmap
-- [ ] Add more tool integrations.
-- [ ] Optimize VRAM usage for simultaneous STT/LLM/TTS.
+## Shortcuts & Commands
+- **Wake Word:** "Hey Jarvis"
+- **Settings:** Click the ⚙️ icon in the GUI or type `/settings` in the terminal.
+- **Exit:** Close the window or press `Ctrl+C`. JARVIS will automatically clean up your VRAM.
 
 ---
-
 **Made with the help of AI.**
-
-## License
-MIT License. See [LICENSE](LICENSE) for details.
+MIT License.
