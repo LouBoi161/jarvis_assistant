@@ -202,8 +202,14 @@ class JarvisAssistant:
                         res = parse_and_execute_tool(json.dumps(data))
                         self.history.append({"role": "system", "content": f"TOOL_RESULT: {res or 'Done.'}\nNEXT STEP: Continue until task is finished."})
                         did_action = True
+                    else:
+                        self.log("JSON PARSE ERROR: 'tool' key is missing.", "standard")
+                        self.history.append({"role": "system", "content": "JSON FORMAT ERROR: Missing 'tool' key in JSON."})
+                        did_action = True
                 except Exception as e:
-                    self.log(f"PARSE ERROR: {e}", "debug")
+                    self.log(f"JSON PARSE ERROR: {e} - Bitte JSON reparieren.", "standard")
+                    self.history.append({"role": "system", "content": f"JSON PARSE ERROR: {e}. Fix your JSON formatting and try again."})
+                    did_action = True
             
             if "task complete" in response_text.lower() or not did_action: break
 

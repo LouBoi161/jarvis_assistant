@@ -125,7 +125,7 @@ def read_process_output() -> str:
             elif index == 4: return filter_noise(full_output) + "\n[FERTIG]"
             elif index == 5: 
                 if not active_process.isalive(): return filter_noise(full_output)
-                return filter_output + "\n[TIMEOUT]"
+                return filter_noise(full_output) + "\n[TIMEOUT]"
             else: active_process.sendline("y"); continue
         except: return filter_noise(full_output)
 
