@@ -85,7 +85,7 @@ class CustomTitleBar(QFrame):
 
 class JarvisGUI(QWidget):
     def __init__(self, assistant):
-        super().__init__(); self.assistant = assistant; self.live_call_active = False; self.init_ui()
+        super().__init__(); self.assistant = assistant; self.init_ui()
     def init_ui(self):
         self.setWindowFlags(Qt.FramelessWindowHint); self.resize(1100, 850)
         self.setStyleSheet("""
@@ -111,11 +111,10 @@ class JarvisGUI(QWidget):
         sidebar_layout = QVBoxLayout(self.sidebar); sidebar_layout.setContentsMargins(10, 30, 10, 20); sidebar_layout.setAlignment(Qt.AlignTop | Qt.AlignCenter)
         self.btn_chat = QPushButton("💬"); self.btn_chat.setObjectName("SidebarBtn"); self.btn_chat.setCheckable(True)
         self.btn_settings = QPushButton("⚙"); self.btn_settings.setObjectName("SidebarBtn"); self.btn_settings.setCheckable(True)
-        self.btn_live = QPushButton("📞"); self.btn_live.setObjectName("LiveCallBtn"); self.btn_live.setCheckable(True)
-        for btn in [self.btn_chat, self.btn_settings, self.btn_live]: btn.setFixedSize(70, 65); btn.setCursor(Qt.PointingHandCursor)
+        for btn in [self.btn_chat, self.btn_settings]: btn.setFixedSize(70, 65); btn.setCursor(Qt.PointingHandCursor)
         self.btn_chat.setChecked(True); self.btn_chat.clicked.connect(lambda: self.switch_page(0))
-        self.btn_settings.clicked.connect(lambda: self.switch_page(1)); self.btn_live.clicked.connect(self.toggle_live_call)
-        sidebar_layout.addWidget(self.btn_chat); sidebar_layout.addWidget(self.btn_settings); sidebar_layout.addStretch(); sidebar_layout.addWidget(self.btn_live)
+        self.btn_settings.clicked.connect(lambda: self.switch_page(1))
+        sidebar_layout.addWidget(self.btn_chat); sidebar_layout.addWidget(self.btn_settings); sidebar_layout.addStretch()
         self.content_container.addWidget(self.sidebar); self.stack = QStackedWidget()
         self.chat_page = QWidget(); chat_l = QVBoxLayout(self.chat_page); chat_l.setContentsMargins(0, 0, 0, 0)
         self.status_bar = QFrame(); self.status_bar.setFixedHeight(55); self.status_bar.setStyleSheet("background-color: #0b0e14; border-bottom: 1px solid #1a1f29;")
@@ -136,10 +135,6 @@ class JarvisGUI(QWidget):
         self.save_b = QPushButton("EINSTELLUNGEN SPEICHERN"); self.save_b.setFixedHeight(65); self.save_b.setCursor(Qt.PointingHandCursor); self.save_b.setStyleSheet("QPushButton { background: #00d4ff; color: #0b0e14; font-weight: bold; font-size: 15px; border-radius: 12px; margin-top: 20px; border: none; }")
         self.save_b.clicked.connect(self.save_settings); self.set_scroll_l.addWidget(self.save_b); self.set_scroll.setWidget(self.set_scroll_content); self.set_scroll.setWidgetResizable(True); set_l.addWidget(self.set_scroll); self.stack.addWidget(self.settings_page)
         self.content_container.addWidget(self.stack); self.layout.addLayout(self.content_container); self.sizegrip = QSizeGrip(self); self.layout.addWidget(self.sizegrip, 0, Qt.AlignBottom | Qt.AlignRight); self.load_settings_into_ui()
-    def toggle_live_call(self):
-        self.live_call_active = self.btn_live.isChecked(); self.assistant.toggle_live_call(self.live_call_active)
-        if self.live_call_active: self.display_text("System", "Live Call gestartet. Du kannst jetzt einfach sprechen.")
-        else: self.display_text("System", "Live Call beendet. Wake-Word ('Hey Jarvis') wieder aktiv.")
     def add_setting_group(self, parent_layout, title, widget):
         group = QFrame(); group.setStyleSheet("background: #0f131a; border-radius: 15px; padding: 30px; border: 2px solid #1a1f29;"); l = QVBoxLayout(group); t = QLabel(title); t.setStyleSheet("color: #666; font-size: 11px; font-weight: bold; margin-bottom: 15px; border: none;"); l.addWidget(t); l.addWidget(widget); parent_layout.addWidget(group)
     def init_model_settings(self):

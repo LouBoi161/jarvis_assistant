@@ -97,7 +97,6 @@ class JarvisAssistant:
         self.processing_lock = threading.Lock()
         self.interrupted_by_user = False 
         self.interrupted_by_wakeword = False
-        self.live_call_active = False
 
     def init_tts(self):
         config = {"tts_type": self.tts_type, "piper_voice": self.piper_voice, "kokoro_voice": self.kokoro_voice}
@@ -134,14 +133,29 @@ class JarvisAssistant:
     def transcribe_audio(self, wav_path):
         try:
             if self.stt_model is None:
-                self.stt_model = whisper.load_model(WHISPER_MODEL_NAME, device="cpu")
-            result = self.stt_model.transcribe(wav_path)
+                # Nutze CUDA falls verfügbar für massiven Speed-Boost
+                device = "cuda" if torch.cuda.is_available() else "cpu"
+                self.stt_model = whisper.load_model(WHISPER_MODEL_NAME, device=device)
+            
+            result = self.stt_model.transcribe(wav_path, fp16=torch.cuda.is_available())
             text = result["text"].strip()
+            
+            # Whisper Halluzinations-Filter
+            # 1. Zu kurz (meistens nur Rauschen)
+            if len(text) < 3: return ""
+            # 2. Bekannte Whisper-"Gedanken" (oft bei Stille)
+            hallucinations = ["vielen dank", "untertitel", "zuschauen", "reutlingen", "you", "thanks for watching", "amara.org", "subtitle"]
+            if any(h in text.lower() for h in hallucinations) and len(text) < 20:
+                self.log(f"Whisper Halluzination ignoriert: {text}", "debug")
+                return ""
+
             if text:
                 self.last_detected_lang = result.get("language", "de")
                 self.log(f"Du: {text}", "standard")
             return text
-        except: return ""
+        except Exception as e:
+            self.log(f"STT Error: {e}", "debug")
+            return ""
 
     def stop_execution(self):
         self.interrupted_by_user = True
@@ -287,15 +301,13 @@ class JarvisAssistant:
         self.log("JARVIS ONLINE", "standard")
         while True:
             try:
-                if not self.live_call_active:
-                    self.set_status("idle")
-                    if listen_for_wakeword():
-                        self.set_status("listening")
-                        data = record_until_silence()
-                        save_wav("latest_input.wav", data)
-                        text = self.transcribe_audio("latest_input.wav")
-                        if text: self.run_ollama_agent(text)
-                else: time.sleep(1)
+                self.set_status("idle")
+                if listen_for_wakeword():
+                    self.set_status("listening")
+                    data = record_until_silence()
+                    save_wav("latest_input.wav", data)
+                    text = self.transcribe_audio("latest_input.wav")
+                    if text: self.run_ollama_agent(text)
             except: time.sleep(1)
 
 if __name__ == "__main__":
