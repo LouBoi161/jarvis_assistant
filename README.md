@@ -39,6 +39,9 @@ cd jarvis_assistant
 # Setup & Install
 uv venv
 uv pip install -r requirements.txt
+
+# Download initial offline voices (Piper TTS)
+uv run python download_voices.py
 ```
 
 ## Usage
