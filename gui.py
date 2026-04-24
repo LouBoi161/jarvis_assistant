@@ -123,10 +123,21 @@ class JarvisGUI(QWidget):
         sb_l.addWidget(self.status_dot); sb_l.addWidget(self.status_text); sb_l.addStretch(); chat_l.addWidget(self.status_bar)
         self.scroll = QScrollArea(); self.scroll_content = QWidget(); self.scroll_l = QVBoxLayout(self.scroll_content); self.scroll_l.setAlignment(Qt.AlignTop); self.scroll_l.setContentsMargins(40, 20, 40, 20); self.scroll_l.setSpacing(20)
         self.scroll.setWidget(self.scroll_content); self.scroll.setWidgetResizable(True); chat_l.addWidget(self.scroll)
+        
+        self.attachments_cont = QWidget(); self.attachments_l = QHBoxLayout(self.attachments_cont); self.attachments_l.setContentsMargins(40, 0, 40, 0); self.attachments_l.setAlignment(Qt.AlignLeft)
+        chat_l.addWidget(self.attachments_cont)
+        self.attached_files = []
+
         self.input_cont = QFrame(); self.input_cont.setFixedHeight(120); self.input_cont.setStyleSheet("background: #0b0e14; border-top: 1px solid #1a1f29;")
-        ic_l = QHBoxLayout(self.input_cont); ic_l.setContentsMargins(40, 0, 40, 0); self.input_f = QLineEdit(); self.input_f.setPlaceholderText("Frag Jarvis etwas..."); self.input_f.setFixedHeight(55); self.input_f.returnPressed.connect(self.process_text_input)
+        ic_l = QHBoxLayout(self.input_cont); ic_l.setContentsMargins(40, 0, 40, 0)
+        
+        self.attach_b = QPushButton("+"); self.attach_b.setFixedSize(55, 55); self.attach_b.setStyleSheet("background: #1a1f29; color: #00d4ff; border-radius: 27px; font-size: 30px; border: none; padding-bottom: 4px;"); self.attach_b.clicked.connect(self.attach_files); self.attach_b.setCursor(Qt.PointingHandCursor)
+        
+        self.input_f = QLineEdit(); self.input_f.setPlaceholderText("Frag Jarvis etwas..."); self.input_f.setFixedHeight(55); self.input_f.returnPressed.connect(self.process_text_input)
         self.send_b = QPushButton("➤"); self.send_b.setFixedSize(55, 55); self.send_b.setStyleSheet("background: #00d4ff; color: #0b0e14; border-radius: 27px; font-size: 24px; border: none;"); self.send_b.clicked.connect(self.process_text_input)
-        ic_l.addWidget(self.input_f); ic_l.addWidget(self.send_b); chat_l.addWidget(self.input_cont); self.stack.addWidget(self.chat_page)
+        
+        ic_l.addWidget(self.attach_b); ic_l.addWidget(self.input_f); ic_l.addWidget(self.send_b); chat_l.addWidget(self.input_cont); self.stack.addWidget(self.chat_page)
+        
         self.settings_page = QWidget(); set_l = QVBoxLayout(self.settings_page); set_l.setContentsMargins(60, 40, 60, 40); stitle = QLabel("KONFIGURATION"); stitle.setStyleSheet("font-size: 28px; font-weight: bold; color: #00d4ff; margin-bottom: 30px; border: none;"); set_l.addWidget(stitle)
         self.set_scroll = QScrollArea(); self.set_scroll_content = QWidget(); self.set_scroll_l = QVBoxLayout(self.set_scroll_content); self.set_scroll_l.setSpacing(30)
         self.add_setting_group(self.set_scroll_l, "KI-LOGIK", self.init_model_settings())
@@ -135,6 +146,16 @@ class JarvisGUI(QWidget):
         self.save_b = QPushButton("EINSTELLUNGEN SPEICHERN"); self.save_b.setFixedHeight(65); self.save_b.setCursor(Qt.PointingHandCursor); self.save_b.setStyleSheet("QPushButton { background: #00d4ff; color: #0b0e14; font-weight: bold; font-size: 15px; border-radius: 12px; margin-top: 20px; border: none; }")
         self.save_b.clicked.connect(self.save_settings); self.set_scroll_l.addWidget(self.save_b); self.set_scroll.setWidget(self.set_scroll_content); self.set_scroll.setWidgetResizable(True); set_l.addWidget(self.set_scroll); self.stack.addWidget(self.settings_page)
         self.content_container.addWidget(self.stack); self.layout.addLayout(self.content_container); self.sizegrip = QSizeGrip(self); self.layout.addWidget(self.sizegrip, 0, Qt.AlignBottom | Qt.AlignRight); self.load_settings_into_ui()
+    def attach_files(self):
+        from PyQt5.QtWidgets import QFileDialog
+        files, _ = QFileDialog.getOpenFileNames(self, "Dateien auswählen", "", "Alle Dateien (*.*)")
+        if files:
+            for f in files:
+                if f not in self.attached_files:
+                    self.attached_files.append(f)
+                    lbl = QLabel(os.path.basename(f))
+                    lbl.setStyleSheet("background: #1a1f29; color: #00d4ff; padding: 5px 10px; border-radius: 10px; font-size: 11px;")
+                    self.attachments_l.addWidget(lbl)
     def add_setting_group(self, parent_layout, title, widget):
         group = QFrame(); group.setStyleSheet("background: #0f131a; border-radius: 15px; padding: 30px; border: 2px solid #1a1f29;"); l = QVBoxLayout(group); t = QLabel(title); t.setStyleSheet("color: #666; font-size: 11px; font-weight: bold; margin-bottom: 15px; border: none;"); l.addWidget(t); l.addWidget(widget); parent_layout.addWidget(group)
     def init_model_settings(self):
@@ -169,7 +190,17 @@ class JarvisGUI(QWidget):
         QTimer.singleShot(100, lambda: self.scroll.verticalScrollBar().setValue(self.scroll.verticalScrollBar().maximum()))
     def process_text_input(self):
         t = self.input_f.text().strip()
-        if t: self.display_text("User", t); self.input_f.clear(); threading.Thread(target=self.assistant.run_ollama_agent, args=(t,), daemon=True).start()
+        files = list(self.attached_files)
+        if t or files: 
+            display_str = t
+            if files: display_str += f"\n[Anhänge: {len(files)} Datei(en)]"
+            self.display_text("User", display_str)
+            self.input_f.clear()
+            while self.attachments_l.count():
+                item = self.attachments_l.takeAt(0)
+                if item.widget(): item.widget().deleteLater()
+            self.attached_files.clear()
+            threading.Thread(target=self.assistant.run_ollama_agent, args=(t, files), daemon=True).start()
     def closeEvent(self, event): self.assistant.unload_models(); os.killpg(0, 9); event.accept()
 
 if __name__ == "__main__":

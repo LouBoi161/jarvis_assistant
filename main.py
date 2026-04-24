@@ -161,21 +161,21 @@ class JarvisAssistant:
         self.interrupted_by_user = True
         self.interrupted_by_wakeword = True
 
-    def run_ollama_agent(self, user_text):
+    def run_ollama_agent(self, user_text, attached_files=None):
         self.interrupted_by_user = False
         self.interrupted_by_wakeword = False
-        threading.Thread(target=self._run_agent_logic_safe, args=(user_text,), daemon=True).start()
+        threading.Thread(target=self._run_agent_logic_safe, args=(user_text, attached_files), daemon=True).start()
 
-    def _run_agent_logic_safe(self, user_text):
+    def _run_agent_logic_safe(self, user_text, attached_files=None):
         try:
             with self.processing_lock:
-                self._run_agent_loop(user_text)
+                self._run_agent_loop(user_text, attached_files)
         except Exception as e:
             self.log(f"CRITICAL ERROR: {e}\n{traceback.format_exc()}", "standard")
         finally:
             self.set_status("idle")
 
-    def _run_agent_loop(self, user_text):
+    def _run_agent_loop(self, user_text, attached_files=None):
         self.log(f"AGENT START: {user_text}", "debug")
         self.set_status("thinking")
         
@@ -200,7 +200,33 @@ class JarvisAssistant:
         else:
             self.history[0] = {"role": "system", "content": prompt}
         
-        self.history.append({"role": "user", "content": user_text})
+        images = []
+        if attached_files:
+            for f in attached_files:
+                if not os.path.exists(f): continue
+                ext = f.split('.')[-1].lower()
+                if ext in ['png', 'jpg', 'jpeg', 'bmp', 'webp', 'gif']:
+                    images.append(f)
+                elif ext in ['txt', 'md', 'html', 'json', 'csv', 'py', 'js', 'sh', 'c', 'cpp', 'rs', 'toml', 'yaml', 'xml', 'ini', 'cfg']:
+                    try:
+                        with open(f, "r", encoding="utf-8") as file:
+                            content = file.read()
+                            user_text += f"\n\n[Inhalt der angehängten Datei {os.path.basename(f)}]:\n```\n{content}\n```"
+                    except Exception as e:
+                        user_text += f"\n\n[Fehler beim Lesen von {os.path.basename(f)}: {e}]"
+                elif ext in ['mp3', 'wav', 'ogg', 'm4a', 'flac']:
+                    self.log(f"Transkribiere Audio: {os.path.basename(f)}...", "standard")
+                    transcript = self.transcribe_audio(f)
+                    if transcript:
+                        user_text += f"\n\n[Audio-Transkription von {os.path.basename(f)}]:\n\"{transcript}\""
+                else:
+                    user_text += f"\n\n[Die Datei {os.path.basename(f)} wurde angehängt. Der absolute Pfad lautet: {os.path.abspath(f)}. Du kannst 'execute_command' nutzen, um Tools wie 'cat', 'pdfinfo' oder 'ffmpeg' auf diese Datei anzuwenden.]"
+
+        user_msg = {"role": "user", "content": user_text}
+        if images:
+            user_msg["images"] = images
+            
+        self.history.append(user_msg)
         
         if len(self.history) > 10:
             self.history = [self.history[0]] + self.history[-5:]
