@@ -56,7 +56,12 @@ def search_web(query: str, max_results: int = 3) -> str:
 def write_file(file_path: str, content: str) -> str:
     print(f"[Tool Execution] Schreibe Datei: '{file_path}'")
     try:
-        path = os.path.abspath(os.path.expanduser(file_path))
+        # Pfad-Auflösung verbessern: Immer vom Home-Verzeichnis ausgehen, falls nicht absolut
+        path = os.path.expanduser(file_path)
+        if not os.path.isabs(path):
+            path = os.path.join(os.path.expanduser("~"), path)
+        path = os.path.abspath(path)
+        
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
             f.write(content)
@@ -66,7 +71,7 @@ def write_file(file_path: str, content: str) -> str:
 def take_screenshot() -> str:
     print("[Tool Execution] Screenshot via grim...")
     try:
-        path = os.path.abspath(os.path.expanduser(f"~/screenshot_{int(time.time())}.png"))
+        path = os.path.abspath(os.path.expanduser("~/screenshot_" + str(int(time.time())) + ".png"))
         subprocess.run(f"grim '{path}'", shell=True, check=True)
         return f"ERFOLG: Screenshot gespeichert unter: {path}"
     except Exception as e: return f"FEHLER: {e}"
@@ -130,7 +135,8 @@ def read_process_output() -> str:
         except: return filter_noise(full_output)
 
 def get_system_info() -> str:
-    return json.dumps({"os": "Linux", "distro": "CachyOS", "user": os.environ.get("USER", "louis")})
+    now = time.strftime("%A, %d. %B %Y, %H:%M:%S")
+    return json.dumps({"os": "Linux", "distro": "CachyOS", "user": os.environ.get("USER", "louis"), "current_time": now})
 
 def parse_and_execute_tool(json_string: str) -> str:
     try:

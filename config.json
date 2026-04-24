@@ -2,7 +2,8 @@
     "ollama_model": "gemma4:e4b",
     "view_mode": "standard",
     "security_mode": false,
+    "language": "de",
     "tts_type": "piper-tts",
-    "piper_voice": "de_DE-thorsten-high",
-    "qwen_voice": "default.wav"
+    "piper_voice": "",
+    "kokoro_voice": "gf_eva"
 }
