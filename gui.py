@@ -17,7 +17,7 @@ import ollama
 
 class AssistantThread(QThread):
     status_changed = pyqtSignal(str) 
-    text_received = pyqtSignal(str, str, dict) # sender, text, data (optional metadata)
+    text_received = pyqtSignal(str, str) # sender, text
     
     def __init__(self, assistant):
         super().__init__()
@@ -25,31 +25,31 @@ class AssistantThread(QThread):
         self.original_log = self.assistant.log
         self.assistant.log = self.custom_log
         
-    def custom_log(self, message, level="debug", metadata=None):
-        self.original_log(message, level, metadata)
+    def custom_log(self, message, level="debug"):
+        self.original_log(message, level)
         if level == "standard":
             if message.startswith("Du:"):
                 sender = "User"
                 text = message.replace("Du:", "").strip()
-                self.text_received.emit(sender, text, {})
+                self.text_received.emit(sender, text)
             elif message.startswith("[Jarvis]:"):
                 sender = "Jarvis"
                 text = message.replace("[Jarvis]:", "").strip()
-                self.text_received.emit(sender, text, metadata or {})
+                self.text_received.emit(sender, text)
             elif message.startswith("TOOL:"):
                 sender = "Tool"
                 text = message.replace("TOOL:", "").strip()
-                self.text_received.emit(sender, text, {})
+                self.text_received.emit(sender, text)
             else:
-                self.text_received.emit("System", message, {})
+                self.text_received.emit("System", message)
 
     def run(self):
         self.assistant.run_voice_only()
 
 class ChatBubble(QFrame):
-    def __init__(self, sender, text, metadata=None, gui_parent=None):
+    def __init__(self, sender, text, gui_parent=None):
         super().__init__()
-        self.sender = sender; self.text = text; self.metadata = metadata or {}; self.gui_parent = gui_parent
+        self.sender = sender; self.text = text; self.gui_parent = gui_parent
         layout = QVBoxLayout(self); self.setContentsMargins(15, 10, 15, 10)
         is_jarvis = (sender == "Jarvis"); is_tool = (sender == "Tool")
         if is_tool: bg_color = "rgba(0, 212, 255, 15)"; border_color = "rgba(0, 212, 255, 30)"; text_color = "#00d4ff"; font_style = "italic"; font_size = "12px"
@@ -65,15 +65,6 @@ class ChatBubble(QFrame):
         self.text_label = QLabel(text); self.text_label.setWordWrap(True)
         self.text_label.setStyleSheet(f"color: {text_color}; font-size: {font_size}; font-style: {font_style}; background: transparent; border: none;")
         self.text_label.setTextInteractionFlags(Qt.TextSelectableByMouse); layout.addWidget(self.text_label)
-        if is_jarvis and self.metadata.get("can_train"):
-            btn_layout = QHBoxLayout(); btn_layout.addStretch()
-            self.btn_up = QPushButton("👍"); self.btn_up.setFixedSize(30, 30); self.btn_up.setCursor(Qt.PointingHandCursor)
-            self.btn_up.setStyleSheet("background: rgba(0,255,100,20); border: 1px solid #00ff64; border-radius: 5px; color: white;")
-            self.btn_up.clicked.connect(self.approve_training); btn_layout.addWidget(self.btn_up); layout.addLayout(btn_layout)
-    def approve_training(self):
-        if self.gui_parent and hasattr(self.gui_parent, 'assistant'):
-            self.gui_parent.assistant.save_training_example(self.metadata)
-            self.btn_up.setText("✅"); self.btn_up.setEnabled(False)
 
 class CustomTitleBar(QFrame):
     def __init__(self, parent):
@@ -178,8 +169,8 @@ class JarvisGUI(QWidget):
     def update_status(self, status):
         m = {"idle": ("#00d4ff", "JARVIS ONLINE"), "listening": ("#ff0064", "JARVIS HÖRT ZU..."), "thinking": ("#ffffff", "JARVIS DENKT..."), "speaking": ("#00ff96", "JARVIS SPRICHT")}
         c, t = m.get(status, m["idle"]); self.status_dot.setStyleSheet(f"color: {c}; font-size: 20px; margin-left: 20px;"); self.status_text.setText(t); self.status_text.setStyleSheet(f"font-weight: bold; color: {c}; font-size: 13px; border: none;")
-    def display_text(self, sender, text, metadata=None):
-        bubble = ChatBubble(sender, text, metadata, self); self.scroll_l.addWidget(bubble)
+    def display_text(self, sender, text):
+        bubble = ChatBubble(sender, text, self); self.scroll_l.addWidget(bubble)
         QTimer.singleShot(100, lambda: self.scroll.verticalScrollBar().setValue(self.scroll.verticalScrollBar().maximum()))
     def process_text_input(self):
         t = self.input_f.text().strip()

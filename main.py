@@ -25,7 +25,6 @@ logging.getLogger("httpx").setLevel(logging.ERROR)
 
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
 LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "latest_session.log")
-TRAIN_DATA_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "training_data.jsonl")
 WHISPER_MODEL_NAME = "base"
 
 class JarvisAssistant:
@@ -37,13 +36,12 @@ class JarvisAssistant:
         except: pass
 
         self.view_mode = "standard"
-        self.ollama_model = "gemma4:e2b"
+        self.ollama_model = "gemma4:e2b" # Standard auf das neue Modell
         self.security_mode = True
         self.language = "de"
         self.last_detected_lang = "de"
         self.tts_type = "kokoro-tts"
         self.piper_voice = "de_DE-thorsten-high"
-        self.qwen_voice = "default.wav"
         self.kokoro_voice = "gf_eva"
         self.on_status_change = None 
         
@@ -59,7 +57,7 @@ class JarvisAssistant:
         self.live_call_active = False
 
     def init_tts(self):
-        config = {"tts_type": self.tts_type, "piper_voice": self.piper_voice, "qwen_voice": self.qwen_voice, "kokoro_voice": self.kokoro_voice}
+        config = {"tts_type": self.tts_type, "piper_voice": self.piper_voice, "kokoro_voice": self.kokoro_voice}
         self.tts = TTSEngine(config=config, use_gpu=True, stt_model=None)
 
     def log(self, message, level="debug", metadata=None):
@@ -82,20 +80,13 @@ class JarvisAssistant:
             except: pass
 
     def save_config(self):
-        config = {attr: getattr(self, attr) for attr in ["ollama_model", "view_mode", "security_mode", "language", "tts_type", "piper_voice", "qwen_voice", "kokoro_voice"]}
+        config = {attr: getattr(self, attr) for attr in ["ollama_model", "view_mode", "security_mode", "language", "tts_type", "piper_voice", "kokoro_voice"]}
         try:
             with open(CONFIG_FILE, "w") as f: json.dump(config, f, indent=4)
         except: pass
 
     def set_status(self, status):
         if self.on_status_change: self.on_status_change(status)
-
-    def save_training_example(self, metadata):
-        try:
-            with open(TRAIN_DATA_FILE, "a", encoding="utf-8") as f:
-                f.write(json.dumps(metadata, ensure_ascii=False) + "\n")
-                f.flush()
-        except: pass
 
     def transcribe_audio(self, wav_path):
         try:
@@ -133,22 +124,15 @@ class JarvisAssistant:
         
         lang = self.language if self.language != "auto" else self.last_detected_lang
         prompt = (
-            f"You are Jarvis, a highly autonomous AI agent on Linux. SECURITY_MODE: {self.security_mode}.\n\n"
+            f"You are Jarvis, a highly autonomous AI agent on Linux. Mode: FINETUNED_EXPERT.\n\n"
             "CRITICAL RULES:\n"
-            "1. NO PLACEHOLDERS: Never use '...' in your JSON. Replace with real data.\n"
-            "2. TOOL COMPULSION: You MUST use a tool to get real info. For facts, use search_web.\n"
-            "3. JSON FORMAT: Output exactly ONE raw JSON block at the end. No markdown.\n"
+            "1. JSON FORMAT: Output exactly ONE raw JSON block at the end. No markdown.\n"
             "   Format: { \"tool\": \"name\", \"kwargs\": { \"arg\": \"val\" } }\n"
-            "4. COMPLETION: Say 'Task complete' and STOP when finished.\n"
-            "5. LANGUAGE: Respond always in " + ("ENGLISH" if lang == "en" else "GERMAN") + ".\n\n"
-            "AVAILABLE TOOLS (Examples - Replace '...' with real values):\n"
-            "- search_web: { \"tool\": \"search_web\", \"kwargs\": { \"query\": \"pizza recipe\" } }\n"
-            "- execute_command: { \"tool\": \"execute_command\", \"kwargs\": { \"command\": \"ls -la\" } }\n"
-            "- write_file: { \"tool\": \"write_file\", \"kwargs\": { \"file_path\": \"note.txt\", \"content\": \"Hello World\" } }\n"
-            "- take_screenshot: { \"tool\": \"take_screenshot\", \"kwargs\": {} }\n"
-            "- get_system_info: { \"tool\": \"get_system_info\", \"kwargs\": {} }"
+            "2. COMPLETION: Say 'Task complete' and STOP when finished.\n"
+            "3. BE BRIEF: Use max 1-2 sentences.\n"
         )
 
+        # Historie verwalten (System Prompt immer an Pos 0)
         if not self.history:
             self.history.append({"role": "system", "content": prompt})
         else:
@@ -160,8 +144,10 @@ class JarvisAssistant:
         
         for step in range(15):
             if self.interrupted_by_user or self.interrupted_by_wakeword: break
+            
             try:
                 full_resp = ""
+                # Timeout über Session steuern
                 for chunk in ollama.chat(model=self.ollama_model, messages=self.history, stream=True, keep_alive=-1):
                     if self.interrupted_by_user or self.interrupted_by_wakeword: return
                     full_resp += chunk['message']['content']
@@ -186,8 +172,7 @@ class JarvisAssistant:
             if speech and speech != "None" and re.search(r'[a-zA-ZäöüßÄÖÜ]', speech):
                 if speech not in spoken_history:
                     self.set_status("speaking")
-                    metadata = {"can_train": True, "input": user_text, "assistant_resp": response_text}
-                    self.log(f"[Jarvis]: {speech}", "standard", metadata=metadata)
+                    self.log(f"[Jarvis]: {speech}", "standard")
                     stop_ev = threading.Event()
                     if self.tts_type != "none": self.tts.speak(speech, interrupt_event=stop_ev)
                     self.set_status("thinking")
@@ -199,61 +184,27 @@ class JarvisAssistant:
                 try:
                     data = json.loads(json_str)
                     tool_name = data.get('tool'); tool_kwargs = data.get('kwargs', {})
-                    if not tool_name or tool_name == "None":
-                        self.log("FEHLER: 'tool' Feld fehlt im JSON.", "debug")
-                        self.history.append({"role": "system", "content": "FEHLER: Dein JSON ist ungültig oder enthält kein 'tool' Feld. Nutze die Tools wie im Prompt beschrieben."})
-                        continue
-
-                    # PLATZHALTER-SCHUTZ
-                    if any(v == "..." for v in tool_kwargs.values()):
-                        self.history.append({"role": "system", "content": "FEHLER: Du hast '...' als Platzhalter verwendet. Bitte ersetze '...' durch echte Werte (z.B. den echten Suchbegriff)."})
-                        continue
+                    if not tool_name or tool_name == "None": break
 
                     sig = f"{tool_name}_{json.dumps(tool_kwargs, sort_keys=True)}"
-                    if sig == last_tool_sig:
-                        self.log("Loop-Schutz: Gleicher Tool-Aufruf erkannt.", "debug")
-                        break
+                    if sig == last_tool_sig: break
                     last_tool_sig = sig
                     
                     msg = f"TOOL: {tool_name}..."
-                    if tool_name == "search_web": msg = f"TOOL: 🔍 Suche nach: '{tool_kwargs.get('query', 'unbekannt')}'"
-                    elif tool_name == "execute_command": msg = f"TOOL: 💻 Führe aus: `{tool_kwargs.get('command', 'unbekannt')}`"
-                    elif tool_name == "write_file": msg = f"TOOL: 📝 Schreibe: `{tool_kwargs.get('file_path', 'unbekannt')}`"
+                    if tool_name == "execute_command": msg = f"TOOL: 💻 Führe aus: `{tool_kwargs.get('command', '...')}`"
+                    elif tool_name == "search_web": msg = f"TOOL: 🔍 Suche nach: '{tool_kwargs.get('query', '...')}'"
+                    elif tool_name == "write_file": msg = f"TOOL: 📝 Schreibe: `{tool_kwargs.get('file_path', '...')}`"
                     
-                    if msg and "None" not in msg:
-                        self.log(msg, "standard")
+                    if msg and "None" not in msg: self.log(msg, "standard")
                     
                     res = parse_and_execute_tool(json.dumps(data))
-                    self.history.append({"role": "system", "content": f"TOOL_RESULT: {res}\nCONTINUE until done. If finished, say 'Task complete'."})
-                except Exception as e:
-                    self.log(f"JSON Parse Fehler: {e}", "debug")
-                    self.history.append({"role": "system", "content": f"FEHLER beim JSON Parsing: {e}. Stelle sicher, dass du nur ein gültiges JSON-Objekt sendest."})
-            elif "task complete" in response_text.lower():
-                break
-            else:
-                break
+                    self.history.append({"role": "system", "content": f"TOOL_RESULT: {res}\nCONTINUE until done."})
+                except: break
+            else: break
+            
+            if "task complete" in response_text.lower(): break
                 
         self.set_status("idle")
-
-    def run_live_call_loop(self):
-        self.log("LIVE CALL AKTIVIERT.", "standard")
-        self.live_call_active = True
-        while self.live_call_active:
-            try:
-                self.set_status("idle")
-                self.interrupted_by_user = False; self.interrupted_by_wakeword = False
-                audio_data = record_until_silence(silence_duration=1.5, min_recording_duration=0.5)
-                if not self.live_call_active: break
-                self.set_status("thinking")
-                save_wav("live_input.wav", audio_data)
-                text = self.transcribe_audio("live_input.wav")
-                if text and len(text) > 2: self._run_agent_loop(text)
-            except: time.sleep(1)
-
-    def toggle_live_call(self, active):
-        self.live_call_active = active
-        if active: threading.Thread(target=self.run_live_call_loop, daemon=True).start()
-        else: self.stop_execution(); self.set_status("idle")
 
     def update_config(self, d):
         for k, v in d.items():
