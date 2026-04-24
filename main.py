@@ -199,7 +199,7 @@ class JarvisAssistant:
             try:
                 full_resp = ""
                 self.log(f"Schritt {step+1}: Warte auf Ollama...", "debug")
-                for chunk in ollama.chat(model=self.ollama_model, messages=self.history, stream=True, keep_alive=-1):
+                for chunk in ollama.chat(model=self.ollama_model, messages=self.history, stream=True, keep_alive=300):
                     if self.interrupted_by_user or self.interrupted_by_wakeword: return
                     full_resp += chunk['message']['content']
                 response_text = full_resp.strip()
