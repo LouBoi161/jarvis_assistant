@@ -1,0 +1,17 @@
+
+
+--- SESSION START (Sun Apr 26 12:24:52 2026) ---
+[12:24:52] [STANDARD] --- JARVIS INITIALISIERUNG ---
+[12:24:53] [STANDARD] JARVIS ONLINE
+
+
+--- SESSION START (Sun Apr 26 12:27:28 2026) ---
+[12:27:28] [STANDARD] --- JARVIS INITIALISIERUNG ---
+[12:27:28] [STANDARD] JARVIS ONLINE
+[12:27:40] [DEBUG] AGENT START: hallo
+[12:27:40] [DEBUG] Schritt 1: Warte auf Ollama...
+[12:28:48] [STANDARD] [Jarvis]: Greetings. How may I assist you with your Linux environment today?
+[12:28:57] [DEBUG] Schritt 2: Warte auf Ollama...
+[12:29:31] [STANDARD] [Jarvis]: What task can I perform for you in your system?
+[12:29:39] [DEBUG] AGENT START: wie geht es dir?
+[12:29:39] [DEBUG] Schritt 1: Warte auf Ollama...

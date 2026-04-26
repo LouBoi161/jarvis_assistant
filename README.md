@@ -30,18 +30,17 @@ Make sure the service is running and pull the default model:
 ollama pull gemma4:e4b
 ```
 
-### 3. Python Setup (via uv)
+### 3. Setup (via uv)
 ```bash
 # Clone
 git clone https://github.com/LouBoi161/jarvis_assistant.git
 cd jarvis_assistant
 
-# Setup & Install
-uv venv
-uv pip install -r requirements.txt
+# Setup & Install dependencies
+uv sync
 
 # Download initial offline voices (Piper TTS)
-uv run python download_voices.py
+uv run download_voices.py
 ```
 
 ## Usage
@@ -49,13 +48,13 @@ uv run python download_voices.py
 ### 🚀 Start GUI (Recommended)
 The easiest way to use JARVIS is via the floating chat interface:
 ```bash
-uv run python gui.py
+uv run gui.py
 ```
 
 ### 🖥️ Start CLI (Terminal only)
 If you prefer the terminal:
 ```bash
-uv run python main.py
+uv run main.py
 ```
 
 ## Shortcuts & Commands

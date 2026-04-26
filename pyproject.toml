@@ -1,0 +1,28 @@
+[project]
+name = "jarvis-assistant"
+version = "2.3.0"
+description = "Ein autonomer Linux-Sprachassistent mit LLM-Integration, TTS und Tool-Execution."
+authors = [
+    { name = "Louis", email = "louboi161@github.com" }
+]
+dependencies = [
+    "openwakeword",
+    "pyaudio",
+    "numpy>=1.26.0",
+    "torch",
+    "torchaudio",
+    "openai-whisper",
+    "ollama",
+    "ddgs",
+    "qwen-tts",
+    "librosa",
+    "PyQt5",
+    "pexpect",
+    "soundfile",
+    "piper-tts",
+]
+requires-python = ">=3.10"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
