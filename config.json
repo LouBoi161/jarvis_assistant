@@ -1,9 +1,9 @@
 {
-    "ollama_model": "free01/gemma4:e4b",
+    "ollama_model": "qwen3.5:4b",
     "view_mode": "standard",
     "security_mode": false,
     "language": "de",
-    "tts_type": "piper-tts",
-    "piper_voice": "de_DE-thorsten-high",
+    "tts_type": "none",
+    "piper_voice": "en_US-ryan-high",
     "kokoro_voice": "gf_eva"
 }

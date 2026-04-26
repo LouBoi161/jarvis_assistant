@@ -15,3 +15,72 @@
 [12:29:31] [STANDARD] [Jarvis]: What task can I perform for you in your system?
 [12:29:39] [DEBUG] AGENT START: wie geht es dir?
 [12:29:39] [DEBUG] Schritt 1: Warte auf Ollama...
+
+
+--- SESSION START (Sun Apr 26 12:53:04 2026) ---
+[12:53:04] [STANDARD] --- JARVIS INITIALISIERUNG ---
+[12:53:04] [STANDARD] JARVIS ONLINE
+[12:53:30] [DEBUG] AGENT START: hallo, wie geht es dir?
+[12:53:30] [DEBUG] Schritt 1: Warte auf Ollama...
+
+
+--- SESSION START (Sun Apr 26 12:53:58 2026) ---
+[12:53:58] [STANDARD] --- JARVIS INITIALISIERUNG ---
+[12:53:59] [STANDARD] JARVIS ONLINE
+[12:54:02] [DEBUG] AGENT START: öffne firefox
+[12:54:02] [DEBUG] Schritt 1: Warte auf Ollama...
+[12:54:39] [STANDARD] TOOL: 💻 Führe aus: `firefox`
+[12:54:39] [DEBUG] Schritt 2: Warte auf Ollama...
+
+
+--- SESSION START (Sun Apr 26 12:55:04 2026) ---
+[12:55:04] [STANDARD] --- JARVIS INITIALISIERUNG ---
+[12:55:04] [STANDARD] JARVIS ONLINE
+[12:55:18] [DEBUG] AGENT START: wie geht es dir?
+[12:55:18] [DEBUG] Schritt 1: Warte auf Ollama...
+[12:56:53] [DEBUG] Schritt 2: Warte auf Ollama...
+[12:58:24] [STANDARD] TOOL: 🔍 Suche nach: 'heute datum und witterung'
+[12:58:27] [DEBUG] Schritt 3: Warte auf Ollama...
+[12:59:18] [STANDARD] [Jarvis]: Ich habe heute geprüft. Ich habe auch das aktuelle Datum, das Wochentag und andere relevante Informationen recherchiert.
+[13:00:05] [DEBUG] AGENT START: how are you?`
+[13:00:05] [DEBUG] Schritt 1: Warte auf Ollama...
+
+
+--- SESSION START (Sun Apr 26 13:01:28 2026) ---
+[13:01:28] [STANDARD] --- JARVIS INITIALISIERUNG ---
+
+
+--- SESSION START (Sun Apr 26 13:02:24 2026) ---
+[13:02:24] [STANDARD] --- JARVIS INITIALISIERUNG ---
+
+
+--- SESSION START (Sun Apr 26 13:03:01 2026) ---
+[13:03:01] [STANDARD] --- JARVIS INITIALISIERUNG ---
+
+
+--- SESSION START (Sun Apr 26 13:03:15 2026) ---
+[13:03:15] [STANDARD] --- JARVIS INITIALISIERUNG ---
+
+
+--- SESSION START (Sun Apr 26 13:15:48 2026) ---
+[13:15:48] [STANDARD] --- JARVIS INITIALISIERUNG ---
+
+
+--- SESSION START (Sun Apr 26 13:18:01 2026) ---
+[13:18:01] [STANDARD] --- JARVIS INITIALISIERUNG ---
+
+
+--- SESSION START (Sun Apr 26 20:38:23 2026) ---
+[20:38:23] [STANDARD] --- JARVIS INITIALISIERUNG ---
+
+
+--- SESSION START (Sun Apr 26 20:55:28 2026) ---
+[20:55:28] [STANDARD] --- JARVIS INITIALISIERUNG ---
+
+
+--- SESSION START (Sun Apr 26 20:56:45 2026) ---
+[20:56:45] [STANDARD] --- JARVIS INITIALISIERUNG ---
+
+
+--- INTELLIGENT SESSION START (Sun Apr 26 21:11:18 2026) ---
+[21:11:18] [STANDARD] --- JARVIS INITIALISIERUNG ---

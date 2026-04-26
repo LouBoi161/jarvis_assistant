@@ -1,6 +1,6 @@
 [project]
 name = "jarvis-assistant"
-version = "2.3.0"
+version = "2.4.0"
 description = "Ein autonomer Linux-Sprachassistent mit LLM-Integration, TTS und Tool-Execution."
 authors = [
     { name = "Louis", email = "louboi161@github.com" }

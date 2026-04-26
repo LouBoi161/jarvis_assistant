@@ -28,25 +28,34 @@ LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "latest_sess
 WHISPER_MODEL_NAME = "base"
 
 def robust_tool_extraction(s):
+    """Extrahiert Tool-Informationen aus verschiedenen Formaten (JSON, Klartext-Tags oder Direkt-Befehle)."""
     try:
         s_upper = s.upper()
+        
+        # 0. WRITE_FILE (Markdown)
         write_match = re.search(r'WRITE_FILE:\s*([^\n]+)\n+```[a-zA-Z]*\n(.*?)```', s, re.DOTALL | re.IGNORECASE)
         if write_match:
             return {"tool": "write_file", "kwargs": {"file_path": write_match.group(1).strip().strip('`').strip('"'), "content": write_match.group(2).strip()}}
+
+        # 1. SEARCH_WEB: <query>
         if "SEARCH_WEB:" in s_upper:
             query = s[s_upper.find("SEARCH_WEB:") + 11:].split('\n')[0].strip().strip('"')
             return {"tool": "search_web", "kwargs": {"query": query}}
-        for tag in ["EXEC_CMD:", "FIREFOX:", "OPEN:"]:
-            if tag in s_upper:
-                cmd = s[s_upper.find(tag) + len(tag):].split('\n')[0].strip().strip('`').strip('"')
-                if tag != "EXEC_CMD:" and "://" in cmd: cmd = f"firefox {cmd}"
-                return {"tool": "execute_command", "kwargs": {"command": cmd}}
+
+        # 2. EXEC_CMD: <cmd>
+        if "EXEC_CMD:" in s_upper:
+            cmd = s[s_upper.find("EXEC_CMD:") + 9:].split('\n')[0].strip().strip('`').strip('"')
+            return {"tool": "execute_command", "kwargs": {"command": cmd}}
+
+        # 3. Klassisches JSON
         f_b = s.find('{'); l_b = s.rfind('}')
         if f_b != -1 and l_b != -1:
             try:
                 data = json.loads(s[f_b:l_b+1])
                 if "tool" in data: return data
             except: pass
+            
+        # 4. JSON-Stil Regex Fallback
         tool_match = re.search(r'"tool":\s*"([^"]+)"', s)
         if tool_match:
             tool_name = tool_match.group(1)
@@ -55,6 +64,7 @@ def robust_tool_extraction(s):
                 m = re.search(f'"{key}":\s*"([^"\\n]+)"', s)
                 if m: kwargs[key] = m.group(1)
             return {"tool": tool_name, "kwargs": kwargs}
+
     except: pass
     return None
 
@@ -62,7 +72,7 @@ class JarvisAssistant:
     def __init__(self):
         try:
             with open(LOG_FILE, "a", encoding="utf-8") as f:
-                f.write(f"\n\n--- SESSION START ({time.ctime()}) ---\n")
+                f.write(f"\n\n--- INTELLIGENT SESSION START ({time.ctime()}) ---\n")
                 f.flush()
         except: pass
 
@@ -85,7 +95,7 @@ class JarvisAssistant:
         self.processing_lock = threading.Lock()
         self.interrupted_by_user = False 
         self.interrupted_by_wakeword = False
-        self.is_busy = False # Flag um Status-Überschreiben zu verhindern
+        self.is_busy = False
 
     def init_tts(self):
         config = {"tts_type": self.tts_type, "piper_voice": self.piper_voice, "kokoro_voice": self.kokoro_voice}
@@ -117,11 +127,8 @@ class JarvisAssistant:
         except: pass
 
     def set_status(self, status):
-        # Wenn wir gerade beschäftigt sind, darf der Hintergrund-Thread den Status nicht auf "idle" setzen
-        if status == "idle" and self.is_busy:
-            return
-        if self.on_status_change:
-            self.on_status_change(status)
+        if status == "idle" and self.is_busy: return
+        if self.on_status_change: self.on_status_change(status)
 
     def transcribe_audio(self, wav_path):
         try:
@@ -151,14 +158,14 @@ class JarvisAssistant:
         threading.Thread(target=self._run_agent_logic_safe, args=(user_text, attached_files), daemon=True).start()
 
     def _run_agent_logic_safe(self, user_text, attached_files=None):
-        self.is_busy = True # Sperre aktivieren
+        self.is_busy = True
         try:
             with self.processing_lock:
                 self._run_agent_loop(user_text, attached_files)
         except Exception as e:
             self.log(f"CRITICAL ERROR: {e}\n{traceback.format_exc()}", "standard")
         finally:
-            self.is_busy = False # Sperre aufheben
+            self.is_busy = False
             self.set_status("idle")
 
     def _run_agent_loop(self, user_text, attached_files=None):
@@ -166,19 +173,29 @@ class JarvisAssistant:
         self.set_status("thinking")
         
         lang = self.language if self.language != "auto" else self.last_detected_lang
-        now = time.strftime("%A, %d. %B %Y")
+        now = time.strftime("%A, %d. %B %Y, %H:%M")
+        
+        # DER NEUE, HOCHINTELLIGENTE SYSTEM PROMPT
         prompt = (
-            f"You are Jarvis, a highly autonomous AI expert on Linux. Mode: SYSTEM_OWNER.\n"
-            f"TODAYS DATE: {now}.\n\n"
-            "CRITICAL RULES:\n"
-            "1. NO EXCUSES: Never say 'I can't open links' or 'I don't have access'. You HAVE tools!\n"
-            "2. OPENING LINKS: If you have a URL, you MUST use 'EXEC_CMD: firefox <url>' immediately. NEVER just show the link to the user.\n"
-            "3. TOOL FORMATS:\n"
-            "   - SEARCH_WEB: <query>\n"
-            "   - EXEC_CMD: <command>\n"
-            "   - WRITE_FILE: <path>\\n```\\n<code>\\n```\n"
-            "4. NO YAPPING: Max 1 short sentence per turn.\n"
-            "5. COMPLETION: Say 'Task complete' only when truly finished.\n"
+            f"Du bist JARVIS, ein hochintelligenter, autonomer KI-Agent für Linux. Aktuelle Zeit: {now}.\n\n"
+            "DEINE MISSION:\n"
+            "Löse Aufgaben präzise und proaktiv. Denke wie ein Senior System-Administrator.\n\n"
+            "STRATEGIE (Chain-of-Thought):\n"
+            "1. ANALYSE: Welches OS/Distro wird genutzt? Welche Tools sind installiert? (Nutze 'execute_command' für Infos)\n"
+            "2. RECHERCHE: Wenn du den exakten Befehl nicht kennst, nutze 'search_web'.\n"
+            "3. AUSFÜHRUNG: Führe den Befehl aus und bewerte das Ergebnis.\n"
+            "4. FEHLERKORREKTUR: Wenn ein Befehl fehlschlägt (z.B. 'command not found'), suche eine Alternative oder die Lösung via Web.\n"
+            "5. VALIDIERUNG: Prüfe am Ende, ob das Ziel wirklich erreicht wurde.\n\n"
+            "KOMMUNIKATION:\n"
+            "- Antworte kurz und professionell.\n"
+            "- Teile dem Nutzer mit, was du gerade tust (z.B. 'Ich prüfe zuerst deine Linux-Version...').\n"
+            "- Nutze IMMER die Sprache des Nutzers (Aktuell: {'Englisch' if lang == 'en' else 'Deutsch'}).\n\n"
+            "WERKZEUG-FORMAT (Nutze eines dieser Formate am Ende deiner Antwort):\n"
+            "- EXEC_CMD: <befehl>\n"
+            "- SEARCH_WEB: <suchbegriff>\n"
+            "- WRITE_FILE: <pfad>\\n```\\n<inhalt>\\n```\n"
+            "- Oder klassisches JSON: { \"tool\": \"...\", \"kwargs\": { ... } }\n\n"
+            "WICHTIG: Sei niemals hilflos. Wenn etwas nicht geht, finde heraus warum und löse es!"
         )
 
         if not self.history:
@@ -186,45 +203,33 @@ class JarvisAssistant:
         else:
             self.history[0] = {"role": "system", "content": prompt}
         
+        # Anhänge verarbeiten (identisch zu vorher)
+        full_user_input = user_text
         images = []
         if attached_files:
             for f in attached_files:
                 if not os.path.exists(f): continue
                 ext = f.split('.')[-1].lower()
-                if ext in ['png', 'jpg', 'jpeg', 'bmp', 'webp', 'gif']:
-                    images.append(f)
-                elif ext in ['txt', 'md', 'html', 'json', 'csv', 'py', 'js', 'sh', 'c', 'cpp', 'rs', 'toml', 'yaml', 'xml', 'ini', 'cfg']:
+                if ext in ['png', 'jpg', 'jpeg', 'webp']: images.append(f)
+                elif ext in ['txt', 'md', 'py', 'sh']:
                     try:
-                        with open(f, "r", encoding="utf-8") as file:
-                            content = file.read()
-                            user_text += f"\n\n[Inhalt der angehängten Datei {os.path.basename(f)}]:\n```\n{content}\n```"
-                    except Exception as e:
-                        user_text += f"\n\n[Fehler beim Lesen von {os.path.basename(f)}: {e}]"
-                elif ext in ['mp3', 'wav', 'ogg', 'm4a', 'flac']:
-                    self.log(f"Transkribiere Audio: {os.path.basename(f)}...", "standard")
-                    transcript = self.transcribe_audio(f)
-                    if transcript:
-                        user_text += f"\n\n[Audio-Transkription von {os.path.basename(f)}]:\n\"{transcript}\""
-                else:
-                    user_text += f"\n\n[Die Datei {os.path.basename(f)} wurde angehängt. Der absolute Pfad lautet: {os.path.abspath(f)}.]"
+                        with open(f, "r") as file: full_user_input += f"\n\nFile {os.path.basename(f)}:\n{file.read()}"
+                    except: pass
 
-        user_msg = {"role": "user", "content": user_text}
-        if images:
-            user_msg["images"] = images
+        user_msg = {"role": "user", "content": full_user_input}
+        if images: user_msg["images"] = images
         self.history.append(user_msg)
         
-        if len(self.history) > 10:
-            self.history = [self.history[0]] + self.history[-5:]
-
         spoken_history = []
         last_tool_sig = ""
         
         for step in range(15):
             if self.interrupted_by_user or self.interrupted_by_wakeword: break
-            self.set_status("thinking") # Status halten
+            self.set_status("thinking")
+            
             try:
                 full_resp = ""
-                for chunk in ollama.chat(model=self.ollama_model, messages=self.history, stream=True, keep_alive=300):
+                for chunk in ollama.chat(model=self.ollama_model, messages=self.history, stream=True, keep_alive=-1):
                     if self.interrupted_by_user or self.interrupted_by_wakeword: return
                     full_resp += chunk['message']['content']
                 response_text = full_resp.strip()
@@ -232,19 +237,23 @@ class JarvisAssistant:
                 self.log(f"Ollama Error: {e}", "standard"); break
 
             if not response_text: break
+            self.log(f"JARVIS RAW (Step {step}): {response_text}", "debug")
+            
             data = robust_tool_extraction(response_text)
             
-            tags = ["SEARCH_WEB:", "EXEC_CMD:", "WRITE_FILE:", "FIREFOX:", "OPEN:", "GET_SYSTEM_INFO", "TAKE_SCREENSHOT", "{"]
+            # Text-Teil extrahieren (alles vor dem Tool)
+            tags = ["SEARCH_WEB:", "EXEC_CMD:", "WRITE_FILE:", "OPEN:", "{"]
             tag_start = len(response_text)
             for t in tags:
                 idx = response_text.upper().find(t)
                 if idx != -1 and idx < tag_start: tag_start = idx
             
             speech = response_text[:tag_start].strip()
-            speech = re.sub(r"http[s]?://\S+", "", speech)
+            
+            # Sprache säubern
             speech = re.sub(r"<(thought|think)>.*?</\1>", "", speech, flags=re.S | re.I)
-            if data: speech = re.sub(r"```.*?```", "", speech, flags=re.S)
-            speech = speech.replace("json", "").replace("**", "").replace("#", "").replace("`", "").strip()
+            speech = re.sub(r"```.*?```", "", speech, flags=re.S)
+            speech = speech.replace("**", "").replace("#", "").replace("`", "").strip()
 
             if speech and speech != "None" and re.search(r'[a-zA-ZäöüßÄÖÜ]', speech):
                 if speech not in spoken_history:
@@ -252,8 +261,7 @@ class JarvisAssistant:
                     self.log(f"[Jarvis]: {speech}", "standard")
                     stop_ev = threading.Event()
                     if self.tts_type != "none":
-                        tts_thread = threading.Thread(target=self.tts.speak, args=(speech, stop_ev), daemon=True)
-                        tts_thread.start(); tts_thread.join(timeout=15)
+                        self.tts.speak(speech, stop_ev)
                     self.set_status("thinking")
                     spoken_history.append(speech)
             
@@ -263,23 +271,33 @@ class JarvisAssistant:
                 try:
                     tool_name = data.get('tool'); tool_kwargs = data.get('kwargs', {})
                     if not tool_name: break
-                    sig = f"{tool_name}_{json.dumps(tool_kwargs, sort_keys=True)[:100]}"
-                    if sig == last_tool_sig: break
+                    
+                    sig = f"{tool_name}_{json.dumps(tool_kwargs, sort_keys=True)}"
+                    if sig == last_tool_sig:
+                        self.history.append({"role": "system", "content": "FEHLER: Du wiederholst den exakt gleichen Befehl. Versuche einen anderen Weg oder prüfe den Output!"})
+                        continue
                     last_tool_sig = sig
+                    
                     msg = f"TOOL: {tool_name}"
                     if tool_name == "execute_command": msg = f"TOOL: 💻 Führe aus: `{tool_kwargs.get('command', '...')}`"
                     elif tool_name == "search_web": msg = f"TOOL: 🔍 Suche nach: '{tool_kwargs.get('query', '...')}'"
-                    elif tool_name == "write_file": msg = f"TOOL: 📝 Speichere Datei: `{tool_kwargs.get('file_path', '...')}`"
+                    elif tool_name == "write_file": msg = f"TOOL: 📝 Datei: `{tool_kwargs.get('file_path', '...')}`"
                     self.log(msg, "standard")
+                    
                     res = parse_and_execute_tool(json.dumps(data))
-                    self.history.append({"role": "system", "content": f"TOOL_RESULT: {res}\nCONTINUE until done."})
+                    
+                    # Intelligenz-Boost: Wir geben dem Modell den Output und sagen ihm, es soll ihn bewerten
+                    feedback = f"TOOL_RESULT ({tool_name}):\n{res}\n\nBEWERTE den Output. Wurde das Ziel erreicht? Wenn nicht, was ist der nächste Schritt?"
+                    self.history.append({"role": "system", "content": feedback})
+                    
                 except Exception as e:
                     self.log(f"Tool-Error: {e}", "debug"); break
             else:
-                if "task complete" in response_text.lower(): break
+                # Wenn kein Tool mehr kommt und "fertig" signalisiert wird -> Loop Ende
+                if any(x in response_text.lower() for x in ["erledigt", "fertig", "complete", "abgeschlossen"]):
+                    break
+                # Wenn es der letzte Schritt ist oder das Modell nur redet ohne Tool (nach dem ersten Schritt)
                 if step > 0: break
-                
-        self.set_status("idle")
 
     def update_config(self, d):
         for k, v in d.items():
@@ -297,10 +315,8 @@ class JarvisAssistant:
         self.log("JARVIS ONLINE", "standard")
         while True:
             try:
-                # Hier liegt der Fix: Nur auf idle setzen, wenn wir NICHT busy sind
                 if not self.is_busy:
                     self.set_status("idle")
-                
                 if listen_for_wakeword():
                     self.set_status("listening")
                     data = record_until_silence()
