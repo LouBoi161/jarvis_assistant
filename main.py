@@ -250,10 +250,19 @@ class JarvisAssistant:
             
             speech = response_text[:tag_start].strip()
             
-            # Sprache säubern
+            # Sprache säubern (v3.33)
             speech = re.sub(r"<(thought|think)>.*?</\1>", "", speech, flags=re.S | re.I)
             speech = re.sub(r"```.*?```", "", speech, flags=re.S)
-            speech = speech.replace("**", "").replace("#", "").replace("`", "").strip()
+            
+            # Entferne technische Marker wie "json", "markdown" etc. am Satzende oder als Einzelwort
+            speech = re.sub(r"(?i)\b(json|markdown|code|block)\b", "", speech).strip()
+            
+            # Entferne doppelte Leerzeichen und bereinige Satzzeichen-Reste
+            speech = speech.replace("**", "").replace("#", "").replace("`", "")
+            speech = re.sub(r'\s+', ' ', speech).strip()
+            
+            # Falls am Ende nur noch ein einsames Komma oder Punkt nach dem Löschen von "json" steht
+            speech = re.sub(r'[,\s]+$', '.', speech) if speech.endswith(',') else speech.strip()
 
             if speech and speech != "None" and re.search(r'[a-zA-ZäöüßÄÖÜ]', speech):
                 if speech not in spoken_history:
