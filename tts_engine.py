@@ -94,16 +94,36 @@ class TTSEngine:
     def _ensure_qwen_loaded(self):
         if self.qwen_instance is not None: return True
         if Qwen3TTSModel is None: return False
+        
+        model_id = "Qwen/Qwen3-TTS-12Hz-0.6B-Base"
         try:
-            model_id = "Qwen/Qwen3-TTS-12Hz-0.6B-Base"
-            print(f"Lade Qwen3-TTS Modell: {model_id}...")
-            # Wir nutzen das Wrapper-Backend des Pakets
+            print(f"Lade Qwen3-TTS Modell auf {self.device}: {model_id}...")
             self.qwen_instance = Qwen3TTSModel.from_pretrained(
                 model_id, 
                 device_map=self.device,
-                torch_dtype=torch.float16 if "cuda" in self.device else torch.float32
+                dtype=torch.float16 if "cuda" in self.device else torch.float32
             )
             return True
+        except RuntimeError as e:
+            if "CUDA out of memory" in str(e) or "out of memory" in str(e).lower():
+                print(f"Warnung: Nicht genug VRAM für Qwen3-TTS auf {self.device}. Falle auf CPU zurück...")
+                torch.cuda.empty_cache()
+                gc.collect()
+                try:
+                    self.qwen_instance = Qwen3TTSModel.from_pretrained(
+                        model_id, 
+                        device_map="cpu",
+                        dtype=torch.float32
+                    )
+                    self.device = "cpu" # Update device flag for this instance
+                    print("Qwen3-TTS erfolgreich auf CPU geladen.")
+                    return True
+                except Exception as ex:
+                    print(f"Fehler beim Fallback auf CPU für Qwen3-TTS: {ex}")
+                    return False
+            else:
+                print(f"Fehler beim Laden von Qwen3-TTS: {e}")
+                return False
         except Exception as e:
             print(f"Fehler beim Laden von Qwen3-TTS: {e}")
             return False
