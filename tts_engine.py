@@ -1,6 +1,5 @@
 import os
 import torch
-import whisper
 import soundfile as sf
 import pyaudio
 import wave
@@ -19,6 +18,12 @@ try:
 except ImportError:
     Kokoro = None
 
+# Check if qwen_tts is available
+try:
+    from qwen_tts import Qwen3TTSModel
+except ImportError:
+    Qwen3TTSModel = None
+
 class TTSEngine:
     def __init__(self, config=None, use_gpu=True, stt_model=None):
         self.config = config or {}
@@ -31,8 +36,7 @@ class TTSEngine:
         self.device = "cuda" if use_gpu and torch.cuda.is_available() else "cpu"
         
         self.kokoro_instance = None 
-        self.qwen_model = None
-        self.qwen_tokenizer = None
+        self.qwen_instance = None
         
         # Paths
         script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -52,9 +56,9 @@ class TTSEngine:
         if self.kokoro_instance is not None:
             del self.kokoro_instance
             self.kokoro_instance = None
-        if self.qwen_model is not None:
-            del self.qwen_model
-            self.qwen_model = None
+        if self.qwen_instance is not None:
+            del self.qwen_instance
+            self.qwen_instance = None
         if torch.cuda.is_available(): torch.cuda.empty_cache()
         gc.collect()
 
@@ -88,12 +92,17 @@ class TTSEngine:
         return True
 
     def _ensure_qwen_loaded(self):
-        if self.qwen_model is not None: return True
+        if self.qwen_instance is not None: return True
+        if Qwen3TTSModel is None: return False
         try:
-            from transformers import AutoModelForCausalLM, AutoTokenizer
-            model_id = "Qwen/Qwen3-TTS-12Hz-0.6B"
-            self.qwen_tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
-            self.qwen_model = AutoModelForCausalLM.from_pretrained(model_id, device_map=self.device, trust_remote_code=True)
+            model_id = "Qwen/Qwen3-TTS-12Hz-0.6B-Base"
+            print(f"Lade Qwen3-TTS Modell: {model_id}...")
+            # Wir nutzen das Wrapper-Backend des Pakets
+            self.qwen_instance = Qwen3TTSModel.from_pretrained(
+                model_id, 
+                device_map=self.device,
+                torch_dtype=torch.float16 if "cuda" in self.device else torch.float32
+            )
             return True
         except Exception as e:
             print(f"Fehler beim Laden von Qwen3-TTS: {e}")
@@ -137,23 +146,25 @@ class TTSEngine:
         try:
             voice_path = os.path.join(self.voices_dir, self.qwen_voice)
             if not os.path.exists(voice_path):
-                print(f"Stimme {self.qwen_voice} nicht gefunden. Nutze Standard.")
-                # Fallback oder Abbruch
+                print(f"Stimme {self.qwen_voice} nicht gefunden im Ordner {self.voices_dir}")
                 return
 
-            # Voice Cloning Logic
-            # Hinweis: Das ist ein Platzhalter für das tatsächliche Inference-Skript von Qwen3-TTS
-            # Da Qwen3-TTS oft Audio-Ref als Input nimmt:
-            inputs = self.qwen_tokenizer(text, voice_ref=voice_path, return_tensors="pt").to(self.device)
-            with torch.no_grad():
-                output_audio = self.qwen_model.generate(**inputs)
+            print(f"Generiere Qwen3-TTS (Voice Cloning) mit Ref: {self.qwen_voice}")
             
-            temp = f"temp_qwen_{threading.get_ident()}.wav"
-            sf.write(temp, output_audio.cpu().numpy(), 24000) # Beispiel SR
-            self._play_wav(temp, interrupt_event)
-            if os.path.exists(temp): os.remove(temp)
+            # Nutze x_vector_only_mode, da wir kein Transkript der Referenzdatei haben
+            wavs, sr = self.qwen_instance.generate_voice_clone(
+                text=text,
+                ref_audio=voice_path,
+                x_vector_only_mode=True
+            )
+            
+            if wavs and len(wavs) > 0:
+                temp = f"temp_qwen_{threading.get_ident()}.wav"
+                sf.write(temp, wavs[0], sr)
+                self._play_wav(temp, interrupt_event)
+                if os.path.exists(temp): os.remove(temp)
         except Exception as e:
-            print(f"Fehler bei Qwen-TTS: {e}")
+            print(f"Fehler bei Qwen-TTS Inferenz: {e}")
 
     def _play_wav(self, path, interrupt_event):
         p = pyaudio.PyAudio()
