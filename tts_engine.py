@@ -25,18 +25,22 @@ class TTSEngine:
         self.tts_type = self.config.get("tts_type", "kokoro-tts")
         self.piper_voice = self.config.get("piper_voice", "de_DE-thorsten-high")
         self.kokoro_voice = self.config.get("kokoro_voice", "gf_eva")
+        self.qwen_voice = self.config.get("qwen_voice", "default.wav")
         self.stt_model = stt_model
         self.use_gpu = use_gpu
         self.device = "cuda" if use_gpu and torch.cuda.is_available() else "cpu"
         
         self.kokoro_instance = None 
+        self.qwen_model = None
+        self.qwen_tokenizer = None
         
         # Paths
         script_dir = os.path.dirname(os.path.abspath(__file__))
         self.piper_dir = os.path.join(script_dir, "piper_models")
         self.kokoro_dir = os.path.join(script_dir, "kokoro_models")
+        self.voices_dir = os.path.join(script_dir, "voices")
         
-        for d in [self.piper_dir, self.kokoro_dir]:
+        for d in [self.piper_dir, self.kokoro_dir, self.voices_dir]:
             if not os.path.exists(d): os.makedirs(d)
             
         self.piper_binary = os.path.join(script_dir, ".venv", "bin", "piper")
@@ -48,6 +52,9 @@ class TTSEngine:
         if self.kokoro_instance is not None:
             del self.kokoro_instance
             self.kokoro_instance = None
+        if self.qwen_model is not None:
+            del self.qwen_model
+            self.qwen_model = None
         if torch.cuda.is_available(): torch.cuda.empty_cache()
         gc.collect()
 
@@ -80,6 +87,18 @@ class TTSEngine:
             return False
         return True
 
+    def _ensure_qwen_loaded(self):
+        if self.qwen_model is not None: return True
+        try:
+            from transformers import AutoModelForCausalLM, AutoTokenizer
+            model_id = "Qwen/Qwen3-TTS-12Hz-0.6B"
+            self.qwen_tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
+            self.qwen_model = AutoModelForCausalLM.from_pretrained(model_id, device_map=self.device, trust_remote_code=True)
+            return True
+        except Exception as e:
+            print(f"Fehler beim Laden von Qwen3-TTS: {e}")
+            return False
+
     def speak(self, text: str, interrupt_event=None):
         if not text.strip() or self.tts_type == "none": return
         text = re.sub(r"\[.*?\]", "", text)
@@ -91,6 +110,8 @@ class TTSEngine:
             if self._ensure_kokoro_loaded(): self._speak_kokoro(text, interrupt_event)
         elif self.tts_type == "piper-tts":
             if self._ensure_piper_loaded(): self._speak_piper(text, interrupt_event)
+        elif self.tts_type == "qwen3-tts":
+            if self._ensure_qwen_loaded(): self._speak_qwen(text, interrupt_event)
 
     def _speak_kokoro(self, text, interrupt_event):
         try:
@@ -111,6 +132,28 @@ class TTSEngine:
             if os.path.exists(temp):
                 self._play_wav(temp, interrupt_event); os.remove(temp)
         except: pass
+
+    def _speak_qwen(self, text, interrupt_event):
+        try:
+            voice_path = os.path.join(self.voices_dir, self.qwen_voice)
+            if not os.path.exists(voice_path):
+                print(f"Stimme {self.qwen_voice} nicht gefunden. Nutze Standard.")
+                # Fallback oder Abbruch
+                return
+
+            # Voice Cloning Logic
+            # Hinweis: Das ist ein Platzhalter für das tatsächliche Inference-Skript von Qwen3-TTS
+            # Da Qwen3-TTS oft Audio-Ref als Input nimmt:
+            inputs = self.qwen_tokenizer(text, voice_ref=voice_path, return_tensors="pt").to(self.device)
+            with torch.no_grad():
+                output_audio = self.qwen_model.generate(**inputs)
+            
+            temp = f"temp_qwen_{threading.get_ident()}.wav"
+            sf.write(temp, output_audio.cpu().numpy(), 24000) # Beispiel SR
+            self._play_wav(temp, interrupt_event)
+            if os.path.exists(temp): os.remove(temp)
+        except Exception as e:
+            print(f"Fehler bei Qwen-TTS: {e}")
 
     def _play_wav(self, path, interrupt_event):
         p = pyaudio.PyAudio()

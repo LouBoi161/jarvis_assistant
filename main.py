@@ -84,6 +84,7 @@ class JarvisAssistant:
         self.tts_type = "kokoro-tts"
         self.piper_voice = "de_DE-thorsten-high"
         self.kokoro_voice = "gf_eva"
+        self.qwen_voice = "default.wav"
         self.on_status_change = None 
         
         self.load_config()
@@ -98,7 +99,7 @@ class JarvisAssistant:
         self.is_busy = False
 
     def init_tts(self):
-        config = {"tts_type": self.tts_type, "piper_voice": self.piper_voice, "kokoro_voice": self.kokoro_voice}
+        config = {"tts_type": self.tts_type, "piper_voice": self.piper_voice, "qwen_voice": self.qwen_voice, "kokoro_voice": self.kokoro_voice}
         self.tts = TTSEngine(config=config, use_gpu=True, stt_model=None)
 
     def log(self, message, level="debug"):
@@ -121,7 +122,7 @@ class JarvisAssistant:
             except: pass
 
     def save_config(self):
-        config = {attr: getattr(self, attr) for attr in ["ollama_model", "view_mode", "security_mode", "language", "tts_type", "piper_voice", "kokoro_voice"]}
+        config = {attr: getattr(self, attr) for attr in ["ollama_model", "view_mode", "security_mode", "language", "tts_type", "piper_voice", "qwen_voice", "kokoro_voice"]}
         try:
             with open(CONFIG_FILE, "w") as f: json.dump(config, f, indent=4)
         except: pass
