@@ -23,23 +23,38 @@ def get_security_mode():
     except: pass
     return True
 
-def _gui_worker(queue, func_name, *args, **kwargs):
-    app = QApplication.instance() or QApplication(sys.argv)
-    if func_name == "get_gui_password": result = _get_gui_password_logic(*args, **kwargs)
-    else: result = None
-    queue.put(result)
-
-def _get_gui_password_logic():
-    dialog = QInputDialog()
-    dialog.setWindowTitle("Jarvis Sicherheit")
-    dialog.setLabelText("Passwort benötigt:")
-    dialog.setTextEchoMode(QLineEdit.Password)
-    dialog.setWindowFlags(dialog.windowFlags() | Qt.WindowStaysOnTopHint)
-    return dialog.textValue() if dialog.exec_() == QDialog.Accepted else ""
-
 def get_gui_password():
+    print("[Tool Execution] Fordere Passwort via Zenity an...")
+    try:
+        # Zenity ist viel zuverlässiger für Passworteingaben aus Hintergrundprozessen
+        res = subprocess.run(
+            ["zenity", "--password", "--title=Jarvis Sicherheit", "--text=Sudo Passwort benötigt:"],
+            capture_output=True, text=True, timeout=60
+        )
+        if res.returncode == 0:
+            return res.stdout.strip()
+    except Exception as e:
+        print(f"[Tool Execution] Zenity Fehler: {e}")
+    
+    # Fallback auf die alte Methode (nur zur Sicherheit)
     q = Queue(); p = Process(target=_gui_worker, args=(q, "get_gui_password"))
-    p.start(); p.join(); return q.get()
+    p.start(); p.join(timeout=60); return q.get() if not q.empty() else ""
+
+def _gui_worker(queue, func_name, *args, **kwargs):
+    try:
+        app = QApplication.instance() or QApplication(sys.argv)
+        if func_name == "get_gui_password":
+            dialog = QInputDialog()
+            dialog.setWindowTitle("Jarvis Sicherheit")
+            dialog.setLabelText("Passwort benötigt:")
+            dialog.setTextEchoMode(QLineEdit.Password)
+            dialog.setWindowFlags(dialog.windowFlags() | Qt.WindowStaysOnTopHint)
+            if dialog.exec_() == QDialog.Accepted:
+                queue.put(dialog.textValue())
+            else:
+                queue.put("")
+    except:
+        queue.put("")
 
 def search_web(query: str, max_results: int = 3) -> str:
     print(f"[Tool Execution] Suche im Web nach: '{query}'")
