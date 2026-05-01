@@ -176,27 +176,23 @@ class JarvisAssistant:
         lang = self.language if self.language != "auto" else self.last_detected_lang
         now = time.strftime("%A, %d. %B %Y, %H:%M")
         
-        # DER NEUE, HOCHINTELLIGENTE SYSTEM PROMPT
+        # DER NEUE, HOCHINTELLIGENTE SYSTEM PROMPT (v3.40)
         prompt = (
             f"Du bist JARVIS, ein hochintelligenter, autonomer KI-Agent für Linux. Aktuelle Zeit: {now}.\n\n"
             "DEINE MISSION:\n"
             "Löse Aufgaben präzise und proaktiv. Denke wie ein Senior System-Administrator.\n\n"
             "STRATEGIE (Chain-of-Thought):\n"
-            "1. ANALYSE: Welches OS/Distro wird genutzt? Welche Tools sind installiert? (Nutze 'execute_command' für Infos)\n"
-            "2. FAKTEN & WISSEN: Bei allgemeinen Fragen, Fakten über Personen, News oder Dingen, die nicht dein lokales System betreffen (z.B. 'Wie alt ist Papa Platte?'), MUSST du IMMER ZWINGEND 'SEARCH_WEB' nutzen. Erfinde keine Fakten!\n"
-            "3. AUSFÜHRUNG: Führe Befehle aus und bewerte das Ergebnis.\n"
-            "4. FEHLERKORREKTUR: Wenn ein Befehl fehlschlägt, suche eine Alternative oder die Lösung via Web.\n"
-            "5. VALIDIERUNG: Prüfe am Ende, ob das Ziel wirklich erreicht wurde.\n\n"
+            "1. ANALYSE: Welches OS/Distro wird genutzt? Welche Tools sind installiert?\n"
+            "2. FAKTEN & WISSEN: Bei Fragen über Personen, News oder externe Fakten MUSST du IMMER 'SEARCH_WEB' nutzen. Erfinde niemals Fakten!\n"
+            "3. AUSFÜHRUNG: Führe Befehle aus und bewerte das Ergebnis.\n\n"
             "KOMMUNIKATION:\n"
-            "- Rede natürlich, aber EXTREM KURZ. Meistens reicht 1 kurzer, knackiger Satz, der deine Aktion oder das Ergebnis beschreibt.\n"
-            "- Vermeide roboterhafte Sprache wie 'Ich habe recherchiert' oder 'Ich werde prüfen'. Sag stattdessen z.B.: 'Ich suche das kurz heraus.' oder 'Die Person ist 26 Jahre alt.'\n"
-            "- AUSNAHME: Nur bei Aufgaben, die explizit viel Text erfordern (Geschichten erzählen, ausführliche News/Wetterberichte, detaillierte Erklärungen), darfst du lang reden.\n"
-            "- Nutze IMMER die Sprache des Nutzers (Aktuell: {'Englisch' if lang == 'en' else 'Deutsch'}).\n\n"
-            "WERKZEUG-FORMAT (Nutze eines dieser Formate am Ende deiner Antwort):\n"
-            "- EXEC_CMD: <befehl>\n"
+            "- Rede natürlich, aber EXTREM KURZ (meistens 1 Satz).\n"
+            "- Nutze IMMER die Sprache des Nutzers.\n\n"
+            "WERKZEUG-REGELN:\n"
+            "- Nutze NIEMALS Platzhalter wie '...' oder '...' in Tool-Argumenten. Schreibe den VOLLSTÄNDIGEN Suchbegriff oder Pfad.\n"
             "- SEARCH_WEB: <suchbegriff>\n"
-            "- WRITE_FILE: <pfad>\\n```\\n<inhalt>\\n```\n"
-            "- Oder klassisches JSON: { \"tool\": \"...\", \"kwargs\": { ... } }\n\n"
+            "- EXEC_CMD: <befehl>\n"
+            "- WRITE_FILE: <pfad>\\n```\\n<inhalt>\\n```\n\n"
             "WICHTIG: Sei niemals hilflos. Wenn etwas nicht geht, finde heraus warum und löse es!"
         )
 
@@ -283,6 +279,12 @@ class JarvisAssistant:
                     tool_name = data.get('tool'); tool_kwargs = data.get('kwargs', {})
                     if not tool_name: break
                     
+                    # PLATZHALTER-SCHUTZ (v3.40)
+                    arg_str = json.dumps(tool_kwargs)
+                    if "..." in arg_str or ".." in arg_str and tool_name == "search_web":
+                        self.history.append({"role": "system", "content": "FEHLER: Du hast Platzhalter ('...') genutzt. Sei spezifisch! Was genau willst du suchen oder schreiben? Sende den Befehl erneut mit echten Daten."})
+                        continue
+
                     sig = f"{tool_name}_{json.dumps(tool_kwargs, sort_keys=True)}"
                     if sig == last_tool_sig:
                         self.history.append({"role": "system", "content": "FEHLER: Du wiederholst den exakt gleichen Befehl. Versuche einen anderen Weg oder prüfe den Output!"})
