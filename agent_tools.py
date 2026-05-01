@@ -87,13 +87,16 @@ def execute_command(command: str) -> str:
     
     print(f"[Tool Execution] Führe aus: '{command}'")
     
-    # GUI Apps / URLs
+    # GUI Apps / URLs - Nur wenn NICHT sudo verwendet wird
     gui_apps = ["firefox", "brave", "code", "vlc", "steam", "heroic", "nautilus", "dolphin", "xdg-open"]
-    if any(x in command.lower() for x in gui_apps) or command.startswith("http"):
+    is_gui_launch = any(x == command.split()[0].lower() for x in gui_apps) or command.startswith("http")
+    
+    if is_gui_launch and "sudo" not in command:
         subprocess.Popen(command, shell=True, preexec_fn=os.setsid)
         return f"ERFOLG: '{command}' wurde gestartet."
 
-    interactive = any(x in command for x in ["sudo", "install", "-S", "update"])
+    # Interaktive Befehle (Sudo, Installationen, Updates)
+    interactive = any(x in command for x in ["sudo", "install", "-S", "update", "yay", "pacman"])
     if any(x in command for x in ["which ", "ls ", "-Q", "grep "]): interactive = False
 
     if interactive:
