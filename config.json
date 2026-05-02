@@ -1,10 +1,10 @@
 {
-    "ollama_model": "gemma4:e4b",
+    "ollama_model": "gemma4:e2b",
     "view_mode": "standard",
     "security_mode": false,
     "language": "de",
-    "tts_type": "qwen3-tts",
+    "tts_type": "piper-tts",
     "piper_voice": "de_DE-thorsten-high",
-    "kokoro_voice": "gf_eva",
-    "qwen_voice": "default.wav"
+    "qwen_voice": "",
+    "kokoro_voice": "gf_eva"
 }
