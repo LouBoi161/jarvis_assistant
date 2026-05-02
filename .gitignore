@@ -3,6 +3,8 @@ __pycache__/
 venv/
 *.wav
 !notification.wav
+latest_session.log
+latest_input.wav
 *.pyc
 .DS_Store
 .env
