@@ -8,7 +8,7 @@ authors = [
 dependencies = [
     "openwakeword",
     "pyaudio",
-    "numpy>=1.26.0",
+    "numpy<2.0.0",
     "torch",
     "torchaudio",
     "openai-whisper",
