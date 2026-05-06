@@ -1,6 +1,6 @@
 [project]
 name = "jarvis-assistant"
-version = "2.4.0"
+version = "2.5.0"
 description = "Ein autonomer Linux-Sprachassistent mit LLM-Integration, TTS und Tool-Execution."
 authors = [
     { name = "Louis", email = "louboi161@github.com" }
@@ -20,6 +20,7 @@ dependencies = [
     "pexpect",
     "soundfile",
     "piper-tts",
+    "google-generativeai>=0.8.6",
 ]
 requires-python = ">=3.10,<3.12"
 

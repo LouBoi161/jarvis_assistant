@@ -132,7 +132,7 @@ class CustomTitleBar(QFrame):
         self.setStyleSheet("background-color: #07090d; border-bottom: 1px solid #1a1f29;")
         layout = QHBoxLayout(self)
         layout.setContentsMargins(15, 0, 5, 0)
-        self.title = QLabel("JARVIS v2.3")
+        self.title = QLabel("JARVIS v2.4")
         self.title.setStyleSheet("color: #00d4ff; font-weight: bold; font-size: 12px; letter-spacing: 2px; border: none;")
         self.btn_min = QPushButton("─")
         self.btn_max = QPushButton("◻")
@@ -207,9 +207,11 @@ class JarvisGUI(QWidget):
         
         self.settings_page = QWidget(); set_l = QVBoxLayout(self.settings_page); set_l.setContentsMargins(60, 40, 60, 40); stitle = QLabel("KONFIGURATION"); stitle.setStyleSheet("font-size: 28px; font-weight: bold; color: #00d4ff; margin-bottom: 30px;"); set_l.addWidget(stitle)
         self.set_scroll = QScrollArea(); self.set_scroll_content = QWidget(); self.set_scroll_l = QVBoxLayout(self.set_scroll_content); self.set_scroll_l.setSpacing(30)
-        self.add_setting_group(self.set_scroll_l, "KI-LOGIK (OLLAMA)", self.init_model_settings())
+        
+        self.add_setting_group(self.set_scroll_l, "KI-LOGIK & PROVIDER", self.init_model_settings())
         self.add_setting_group(self.set_scroll_l, "SPRACHAUSGABE (TTS)", self.init_tts_settings())
         self.add_setting_group(self.set_scroll_l, "SYSTEM-BERECHTIGUNGEN", self.init_system_settings())
+        
         self.save_b = QPushButton("EINSTELLUNGEN ÜBERNEHMEN"); self.save_b.setFixedHeight(65); self.save_b.setCursor(Qt.PointingHandCursor); self.save_b.setStyleSheet("QPushButton { background: #00d4ff; color: #0b0e14; font-weight: bold; font-size: 15px; border-radius: 12px; margin-top: 20px; } QPushButton:hover { background: #00b8e6; }")
         self.save_b.clicked.connect(self.save_settings); self.set_scroll_l.addWidget(self.save_b); self.set_scroll.setWidget(self.set_scroll_content); self.set_scroll.setWidgetResizable(True); set_l.addWidget(self.set_scroll); self.stack.addWidget(self.settings_page)
         
@@ -217,7 +219,7 @@ class JarvisGUI(QWidget):
 
     def handle_action_click(self):
         if self.is_processing:
-            self.assistant.stop_current_task()
+            self.assistant.stop_execution()
         else:
             self.process_text_input()
 
@@ -240,9 +242,7 @@ class JarvisGUI(QWidget):
         self.is_processing = not enabled
         self.input_f.setEnabled(enabled)
         
-        # Lade-Animation steuern
         if show_loading:
-            # Ans Ende schieben (vor die Bubble)
             self.scroll_l.removeWidget(self.loading_anim)
             self.scroll_l.addWidget(self.loading_anim)
             self.loading_anim.start()
@@ -262,8 +262,6 @@ class JarvisGUI(QWidget):
         is_temp = (sender == "Tool")
         bubble = ChatBubble(sender, text, is_temporary=is_temp)
         if is_temp: self.temp_tool_bubbles.append(bubble)
-        
-        # Vor die Ladeanimation einfügen
         self.scroll_l.insertWidget(self.scroll_l.count() - 1, bubble)
         QTimer.singleShot(100, lambda: self.scroll.verticalScrollBar().setValue(self.scroll.verticalScrollBar().maximum()))
 
@@ -277,20 +275,68 @@ class JarvisGUI(QWidget):
 
     def add_setting_group(self, parent_layout, title, widget):
         group = QFrame(); group.setStyleSheet("background: #0f131a; border-radius: 15px; padding: 30px; border: 2px solid #1a1f29;"); l = QVBoxLayout(group); t = QLabel(title); t.setStyleSheet("color: #666; font-size: 11px; font-weight: bold; margin-bottom: 15px; border: none; letter-spacing: 1px;"); l.addWidget(t); l.addWidget(widget); parent_layout.addWidget(group)
+
     def init_model_settings(self):
-        w = QWidget(); l = QVBoxLayout(w); l.setContentsMargins(0,0,0,0); l.addWidget(QLabel("Aktives LLM Modell:")); self.model_c = QComboBox(); l.addWidget(self.model_c); return w
+        w = QWidget(); l = QVBoxLayout(w); l.setContentsMargins(0,0,0,0); l.setSpacing(15)
+        
+        l.addWidget(QLabel("Provider:"))
+        self.prov_c = QComboBox()
+        self.prov_c.addItems(["ollama", "gemini"])
+        l.addWidget(self.prov_c)
+        
+        self.ollama_cont = QWidget(); ol = QVBoxLayout(self.ollama_cont); ol.setContentsMargins(0,0,0,0)
+        ol.addWidget(QLabel("Ollama Modell:"))
+        self.model_c = QComboBox()
+        ol.addWidget(self.model_c)
+        l.addWidget(self.ollama_cont)
+        
+        self.gemini_cont = QWidget(); gl = QVBoxLayout(self.gemini_cont); gl.setContentsMargins(0,0,0,0); gl.setSpacing(10)
+        gl.addWidget(QLabel("Gemini Modell:"))
+        self.gem_model_f = QLineEdit()
+        self.gem_model_f.setPlaceholderText("gemini-2.0-flash")
+        gl.addWidget(self.gem_model_f)
+        gl.addWidget(QLabel("Gemini API Key:"))
+        self.gem_key_f = QLineEdit()
+        self.gem_key_f.setEchoMode(QLineEdit.Password)
+        gl.addWidget(self.gem_key_f)
+        l.addWidget(self.gemini_cont)
+        
+        self.prov_c.currentTextChanged.connect(self.toggle_provider_fields)
+        return w
+
     def init_tts_settings(self):
-        w = QWidget(); l = QVBoxLayout(w); l.setContentsMargins(0,0,0,0); l.setSpacing(20); l.addWidget(QLabel("TTS Engine:")); self.tts_c = QComboBox(); self.tts_c.addItems(["qwen3-tts", "piper-tts", "none"]); l.addWidget(self.tts_c)
+        w = QWidget(); l = QVBoxLayout(w); l.setContentsMargins(0,0,0,0); l.setSpacing(20); l.addWidget(QLabel("TTS Engine:")); self.tts_c = QComboBox(); self.tts_c.addItems(["kokoro-tts", "piper-tts", "qwen3-tts", "none"]); l.addWidget(self.tts_c)
         self.piper_v_cont = QWidget(); pv_l = QVBoxLayout(self.piper_v_cont); pv_l.setContentsMargins(0,0,0,0); pv_l.addWidget(QLabel("Piper Stimme:")); self.piper_v_c = QComboBox(); pv_l.addWidget(self.piper_v_c); l.addWidget(self.piper_v_cont)
         self.qwen_v_cont = QWidget(); qv_l = QVBoxLayout(self.qwen_v_cont); qv_l.setContentsMargins(0,0,0,0); qv_l.addWidget(QLabel("Stimmen-Klon (.wav):")); self.qwen_v_c = QComboBox(); qv_l.addWidget(self.qwen_v_c); l.addWidget(self.qwen_v_cont)
         self.tts_c.currentTextChanged.connect(self.toggle_voice_fields); return w
+
     def init_system_settings(self):
         w = QWidget(); l = QVBoxLayout(w); l.setContentsMargins(0,0,0,0); l.setSpacing(20); l.addWidget(QLabel("Sprach-Präferenz:")); self.lang_c = QComboBox(); self.lang_c.addItems(["de", "en", "auto"]); l.addWidget(self.lang_c); self.sec_c = QCheckBox("Sicherheitsmodus (Befehlsausführung verhindern)"); l.addWidget(self.sec_c); return w
-    def toggle_voice_fields(self): self.piper_v_cont.setVisible(self.tts_c.currentText() == "piper-tts"); self.qwen_v_cont.setVisible(self.tts_c.currentText() == "qwen3-tts")
+
+    def toggle_provider_fields(self):
+        is_ollama = self.prov_c.currentText() == "ollama"
+        self.ollama_cont.setVisible(is_ollama)
+        self.gemini_cont.setVisible(not is_ollama)
+
+    def toggle_voice_fields(self):
+        self.piper_v_cont.setVisible(self.tts_c.currentText() == "piper-tts")
+        self.qwen_v_cont.setVisible(self.tts_c.currentText() == "qwen3-tts")
+
     def switch_page(self, index):
         self.btn_chat.setChecked(index == 0); self.btn_settings.setChecked(index == 1); self.stack.setCurrentIndex(index)
         if index == 1: self.refresh_all_options()
-    def load_settings_into_ui(self): self.tts_c.setCurrentText(self.assistant.tts_type); self.lang_c.setCurrentText(self.assistant.language); self.sec_c.setChecked(self.assistant.security_mode); self.toggle_voice_fields(); self.refresh_all_options()
+
+    def load_settings_into_ui(self):
+        self.prov_c.setCurrentText(self.assistant.model_provider)
+        self.gem_model_f.setText(self.assistant.gemini_model)
+        self.gem_key_f.setText(self.assistant.gemini_api_key)
+        self.tts_c.setCurrentText(self.assistant.tts_type)
+        self.lang_c.setCurrentText(self.assistant.language)
+        self.sec_c.setChecked(self.assistant.security_mode)
+        self.toggle_provider_fields()
+        self.toggle_voice_fields()
+        self.refresh_all_options()
+
     def refresh_all_options(self):
         try:
             m = [m.model for m in ollama.list().models]
@@ -307,9 +353,21 @@ class JarvisGUI(QWidget):
             v = [f for f in os.listdir(q_dir) if f.endswith(".wav")]
             self.qwen_v_c.clear(); self.qwen_v_c.addItems(sorted(v))
             if self.assistant.qwen_voice in v: self.qwen_v_c.setCurrentText(self.assistant.qwen_voice)
+
     def save_settings(self):
-        d = {"ollama_model": self.model_c.currentText(), "tts_type": self.tts_c.currentText(), "language": self.lang_c.currentText(), "security_mode": self.sec_c.isChecked(), "piper_voice": self.piper_v_c.currentText(), "qwen_voice": self.qwen_v_c.currentText()}
+        d = {
+            "model_provider": self.prov_c.currentText(),
+            "ollama_model": self.model_c.currentText(),
+            "gemini_model": self.gem_model_f.text(),
+            "gemini_api_key": self.gem_key_f.text(),
+            "tts_type": self.tts_c.currentText(),
+            "language": self.lang_c.currentText(),
+            "security_mode": self.sec_c.isChecked(),
+            "piper_voice": self.piper_v_c.currentText(),
+            "qwen_voice": self.qwen_v_c.currentText()
+        }
         self.assistant.update_config(d); self.display_text("System", "Konfiguration erfolgreich gespeichert."); self.switch_page(0)
+
     def closeEvent(self, event):
         if hasattr(self, 'at'): self.at.terminate(); self.at.wait()
         if hasattr(self, 'assistant'): self.assistant.unload_models()

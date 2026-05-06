@@ -2,6 +2,13 @@
 
 Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei festgehalten.
 
+## [2.5.0] - 2026-05-06
+### Hinzugefügt
+- **API-Modell Unterstützung:** Integration der Google Gemini API (`google-generativeai`).
+- **Flexible Provider-Wahl:** Auswahl zwischen lokalem Ollama und Cloud-basiertem Gemini über die Einstellungen.
+- **Sicherheitsfeatures:** API-Keys können direkt in der GUI hinterlegt werden.
+- **Multimodal:** Gemini unterstützt jetzt Bild-Anhänge in Nachrichten.
+
 ## [2.4.0] - 2026-04-20
 ### Hinzugefügt
 - **Intelligentes Gehirn (System Prompt v2):** Kompletter Rewrite des Prompts für "Chain-of-Thought" Denken.

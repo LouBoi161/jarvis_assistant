@@ -5,6 +5,9 @@
     "language": "de",
     "tts_type": "piper-tts",
     "piper_voice": "de_DE-thorsten-high",
-    "qwen_voice": "",
-    "kokoro_voice": "gf_eva"
+    "qwen_voice": "default.wav",
+    "kokoro_voice": "gf_eva",
+    "model_provider": "ollama",
+    "gemini_model": "gemini-2.0-flash",
+    "gemini_api_key": ""
 }

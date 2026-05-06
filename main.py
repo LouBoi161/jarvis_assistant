@@ -14,6 +14,7 @@ import time
 import traceback
 import gc
 import requests
+import google.generativeai as genai
 
 # Eigene Module
 from audio_capture import listen_for_wakeword, record_until_silence, save_wav
@@ -76,6 +77,7 @@ class JarvisAssistant:
                 f.flush()
         except: pass
 
+        # Default values
         self.view_mode = "standard"
         self.ollama_model = "gemma4:e2b"
         self.security_mode = True
@@ -85,6 +87,9 @@ class JarvisAssistant:
         self.piper_voice = "de_DE-thorsten-high"
         self.kokoro_voice = "gf_eva"
         self.qwen_voice = "default.wav"
+        self.model_provider = "ollama"
+        self.gemini_model = "gemini-2.0-flash"
+        self.gemini_api_key = ""
         self.on_status_change = None 
         
         self.load_config()
@@ -122,7 +127,7 @@ class JarvisAssistant:
             except: pass
 
     def save_config(self):
-        config = {attr: getattr(self, attr) for attr in ["ollama_model", "view_mode", "security_mode", "language", "tts_type", "piper_voice", "qwen_voice", "kokoro_voice"]}
+        config = {attr: getattr(self, attr) for attr in ["ollama_model", "view_mode", "security_mode", "language", "tts_type", "piper_voice", "qwen_voice", "kokoro_voice", "model_provider", "gemini_model", "gemini_api_key"]}
         try:
             with open(CONFIG_FILE, "w") as f: json.dump(config, f, indent=4)
         except: pass
@@ -176,7 +181,7 @@ class JarvisAssistant:
         lang = self.language if self.language != "auto" else self.last_detected_lang
         now = time.strftime("%A, %d. %B %Y, %H:%M")
         
-        # DER NEUE, HOCHINTELLIGENTE SYSTEM PROMPT (v3.40)
+        # DER SYSTEM PROMPT
         prompt = (
             f"Du bist JARVIS, ein hochintelligenter, autonomer KI-Agent für Linux. Aktuelle Zeit: {now}.\n\n"
             "DEINE MISSION:\n"
@@ -201,7 +206,7 @@ class JarvisAssistant:
         else:
             self.history[0] = {"role": "system", "content": prompt}
         
-        # Anhänge verarbeiten (identisch zu vorher)
+        # Files handling
         full_user_input = user_text
         images = []
         if attached_files:
@@ -218,6 +223,9 @@ class JarvisAssistant:
         if images: user_msg["images"] = images
         self.history.append(user_msg)
         
+        if len(self.history) > 20:
+            self.history = [self.history[0]] + self.history[-10:]
+
         spoken_history = []
         last_tool_sig = ""
         
@@ -226,20 +234,52 @@ class JarvisAssistant:
             self.set_status("thinking")
             
             try:
-                full_resp = ""
-                for chunk in ollama.chat(model=self.ollama_model, messages=self.history, stream=True, keep_alive=-1):
-                    if self.interrupted_by_user or self.interrupted_by_wakeword: return
-                    full_resp += chunk['message']['content']
-                response_text = full_resp.strip()
+                response_text = ""
+                if self.model_provider == "ollama":
+                    for chunk in ollama.chat(model=self.ollama_model, messages=self.history, stream=True, keep_alive=-1):
+                        if self.interrupted_by_user or self.interrupted_by_wakeword: return
+                        response_text += chunk['message']['content']
+                elif self.model_provider == "gemini":
+                    if not self.gemini_api_key:
+                        self.log("FEHLER: Gemini API Key fehlt.", "standard")
+                        break
+                    genai.configure(api_key=self.gemini_api_key)
+                    model = genai.GenerativeModel(self.gemini_model)
+                    
+                    # Convert history to Gemini format
+                    gemini_history = []
+                    # Gemini expects first message to be user or assistant, but we have system prompt.
+                    # We can pass system prompt in instructions.
+                    gemini_messages = []
+                    for m in self.history[1:]: # Skip system
+                        role = "user" if m["role"] == "user" else "model"
+                        content = m["content"]
+                        # Gemini supports images in parts
+                        if "images" in m:
+                            parts = [content]
+                            for img_path in m["images"]:
+                                from PIL import Image
+                                img = Image.open(img_path)
+                                parts.append(img)
+                            gemini_messages.append({"role": role, "parts": parts})
+                        else:
+                            gemini_messages.append({"role": role, "parts": [content]})
+                    
+                    chat = model.start_chat(history=gemini_messages[:-1])
+                    response = chat.send_message(gemini_messages[-1]["parts"], stream=True)
+                    for chunk in response:
+                        if self.interrupted_by_user or self.interrupted_by_wakeword: return
+                        response_text += chunk.text
+                
+                response_text = response_text.strip()
             except Exception as e:
-                self.log(f"Ollama Error: {e}", "standard"); break
+                self.log(f"Model Error ({self.model_provider}): {e}", "standard"); break
 
             if not response_text: break
             self.log(f"JARVIS RAW (Step {step}): {response_text}", "debug")
             
             data = robust_tool_extraction(response_text)
             
-            # Text-Teil extrahieren (alles vor dem Tool)
             tags = ["SEARCH_WEB:", "EXEC_CMD:", "WRITE_FILE:", "OPEN:", "{"]
             tag_start = len(response_text)
             for t in tags:
@@ -247,20 +287,9 @@ class JarvisAssistant:
                 if idx != -1 and idx < tag_start: tag_start = idx
             
             speech = response_text[:tag_start].strip()
-            
-            # Sprache säubern (v3.33)
             speech = re.sub(r"<(thought|think)>.*?</\1>", "", speech, flags=re.S | re.I)
             speech = re.sub(r"```.*?```", "", speech, flags=re.S)
-            
-            # Entferne technische Marker wie "json", "markdown" etc. am Satzende oder als Einzelwort
-            speech = re.sub(r"(?i)\b(json|markdown|code|block)\b", "", speech).strip()
-            
-            # Entferne doppelte Leerzeichen und bereinige Satzzeichen-Reste
-            speech = speech.replace("**", "").replace("#", "").replace("`", "")
-            speech = re.sub(r'\s+', ' ', speech).strip()
-            
-            # Falls am Ende nur noch ein einsames Komma oder Punkt nach dem Löschen von "json" steht
-            speech = re.sub(r'[,\s]+$', '.', speech) if speech.endswith(',') else speech.strip()
+            speech = speech.replace("**", "").replace("#", "").replace("`", "").strip()
 
             if speech and speech != "None" and re.search(r'[a-zA-ZäöüßÄÖÜ]', speech):
                 if speech not in spoken_history:
@@ -279,15 +308,14 @@ class JarvisAssistant:
                     tool_name = data.get('tool'); tool_kwargs = data.get('kwargs', {})
                     if not tool_name: break
                     
-                    # PLATZHALTER-SCHUTZ (v3.40)
                     arg_str = json.dumps(tool_kwargs)
                     if "..." in arg_str or ".." in arg_str and tool_name == "search_web":
-                        self.history.append({"role": "system", "content": "FEHLER: Du hast Platzhalter ('...') genutzt. Sei spezifisch! Was genau willst du suchen oder schreiben? Sende den Befehl erneut mit echten Daten."})
+                        self.history.append({"role": "system", "content": "FEHLER: Du hast Platzhalter ('...') genutzt. Sei spezifisch!"})
                         continue
 
                     sig = f"{tool_name}_{json.dumps(tool_kwargs, sort_keys=True)}"
                     if sig == last_tool_sig:
-                        self.history.append({"role": "system", "content": "FEHLER: Du wiederholst den exakt gleichen Befehl. Versuche einen anderen Weg oder prüfe den Output!"})
+                        self.history.append({"role": "system", "content": "FEHLER: Du wiederholst den exakt gleichen Befehl."})
                         continue
                     last_tool_sig = sig
                     
@@ -298,19 +326,17 @@ class JarvisAssistant:
                     self.log(msg, "standard")
                     
                     res = parse_and_execute_tool(json.dumps(data))
-                    
-                    # Intelligenz-Boost: Wir geben dem Modell den Output und sagen ihm, es soll ihn bewerten
                     feedback = f"TOOL_RESULT ({tool_name}):\n{res}\n\nBEWERTE den Output. Wurde das Ziel erreicht? Wenn nicht, was ist der nächste Schritt?"
                     self.history.append({"role": "system", "content": feedback})
                     
                 except Exception as e:
                     self.log(f"Tool-Error: {e}", "debug"); break
             else:
-                # Wenn kein Tool mehr kommt und "fertig" signalisiert wird -> Loop Ende
                 if any(x in response_text.lower() for x in ["erledigt", "fertig", "complete", "abgeschlossen"]):
                     break
-                # Wenn es der letzte Schritt ist oder das Modell nur redet ohne Tool (nach dem ersten Schritt)
                 if step > 0: break
+                
+        self.set_status("idle")
 
     def update_config(self, d):
         for k, v in d.items():
